@@ -13,11 +13,11 @@ typedef struct{
     char auxiliary_filename[150];
     enum Output_Format output_format;
     enum Environment_Origin environment_origin;
+    enum Simulation_Type simulation_type;
     bool write_to_file;
     bool show_debug_information;
     bool show_simulation_set_info;
     bool immediate_exit;
-    bool always_move_to_lowest;
     bool prevent_corner_crossing;
     bool allow_X_movement;
     bool single_exit_flag;
@@ -26,8 +26,15 @@ typedef struct{
     int num_simulations;
     int total_num_pedestrians;
     int seed;
-    double alpha;
     double diagonal;
+    double alpha;
+    double delta;
+    double ks;
+    double kd;
+    double density;
+    double min;
+    double max;
+    double step;
 } Command_Line_Args;
 
 error_t parser_function(int key, char *arg, struct argp_state *state);

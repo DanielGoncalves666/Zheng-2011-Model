@@ -144,7 +144,7 @@ Function_Status load_environment()
     if(allocate_grids() == FAILURE)
         return FAILURE;
 
-    if(reset_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number) == FAILURE)
+    if(initialize_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number, 0) == FAILURE)
         return FAILURE;
 
     char read_char = '\0';

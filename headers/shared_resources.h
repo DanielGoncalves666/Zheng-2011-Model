@@ -3,11 +3,20 @@
 
 #include<stdbool.h>
 
+enum Simulation_Type {
+    SIMULATION_DENSITY = 0,
+    SIMULATION_ALPHA,
+    SIMULATION_DELTA,
+    SIMULATION_STATIC_COUPLING,
+    SIMULATION_DYNAMIC_COUPLING,
+    SIMULATION_DOOR_LOCATION_ONLY
+};
+// All simulation types support the variation of door location.
+
 enum Output_Format {
     OUTPUT_VISUALIZATION = 1, 
     OUTPUT_TIMESTEPS_COUNT, 
     OUTPUT_HEATMAP,
-    OUTPUT_DISTRIBUTION_VARIATION
 };
 
 enum Environment_Origin {
@@ -31,10 +40,11 @@ typedef struct{
 }Location;
 
 #define EXIT_VALUE 1
-#define WALL_VALUE 1000
+#define WALL_VALUE -1000
 
 bool origin_uses_auxiliary_data();
 bool origin_uses_static_pedestrians();
 bool origin_uses_static_exits();
+double euclidean_distance(Location first, Location second);
 
 #endif

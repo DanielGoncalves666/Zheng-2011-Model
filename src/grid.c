@@ -96,18 +96,20 @@ Double_Grid allocate_double_grid(int line_number, int column_number)
 }
 
 /**
- * Reset all positions of an integer grid to zero.
+ * Assign the given value to all positions of the provided integer grid.
  *
  * @param integer_grid An integer grid to be reset. 
  * @param line_number Number of lines of the grid.
  * @param column_number Number of columns of the grid.
+ * @param value The value to be assigned to all positions.
+ * 
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
  */
-Function_Status reset_integer_grid(Int_Grid integer_grid, int line_number, int column_number)
+Function_Status initialize_integer_grid(Int_Grid integer_grid, int line_number, int column_number, int value)
 {
     if(integer_grid == NULL)
     {
-        fprintf(stderr, "The Int_Grid passed to 'reset_integer_grid' was a NULL pointer.\n");
+        fprintf(stderr, "The Int_Grid passed to 'initialize_integer_grid' was a NULL pointer.\n");
         return FAILURE;
     }
 
@@ -120,25 +122,27 @@ Function_Status reset_integer_grid(Int_Grid integer_grid, int line_number, int c
         }
 
         for(int h = 0; h < column_number; h++)
-            integer_grid[i][h] = 0;
+            integer_grid[i][h] = value;
     }
 
     return SUCCESS;
 }
 
 /**
- * Reset all positions of a double grid to zero.
+ * Assign the given value to all positions of the provided double grid.
  *
  * @param double_grid A double grid to be reset. 
  * @param line_number Number of lines of the grid.
  * @param column_number Number of columns of the grid.
+ * @param value The value to be assigned to all positions.
+ * 
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
  */
-Function_Status reset_double_grid(Double_Grid double_grid, int line_number, int column_number)
+Function_Status initialize_double_grid(Double_Grid double_grid, int line_number, int column_number, double value)
 {
     if(double_grid == NULL)
     {
-        fprintf(stderr, "The Double_Grid passed to 'reset_double_grid' was a NULL pointer.\n");
+        fprintf(stderr, "The Double_Grid passed to 'initialize_double_grid' was a NULL pointer.\n");
         return FAILURE;
     }
 
@@ -146,12 +150,12 @@ Function_Status reset_double_grid(Double_Grid double_grid, int line_number, int 
     {
         if(double_grid[i] == NULL)
         {
-            fprintf(stderr, "The line %d of the Double_Grid passed to 'reset_double_grid' was a NULL pointer.\n", i);
+            fprintf(stderr, "The line %d of the Double_Grid passed to 'initialize_double_grid' was a NULL pointer.\n", i);
             return FAILURE;
         }
 
         for(int h = 0; h < column_number; h++)
-            double_grid[i][h] = 0.0;
+            double_grid[i][h] = value;
     }
 
     return SUCCESS;
@@ -185,6 +189,43 @@ Function_Status copy_double_grid(Double_Grid destination, Double_Grid source)
         for(int h = 0; h < cli_args.global_column_number; h++)
         {
             destination[i][h] = source[i][h];
+        }
+    }
+
+    return SUCCESS;
+}
+
+/**
+ * Copy the non zero values of the source grid to the destination grid.
+ *
+ * @param destination Double grid where the content is to be copied.
+ * @param source Int grid to be copied.
+ * @return Function_Status: FAILURE (0) or SUCCESS (1).
+ * 
+ * @note Both grids must be of global size (lines and columns). Otherwise, undefined behavior will happen.
+ */
+Function_Status copy_non_zero_values(Double_Grid destination, Int_Grid source)
+{
+    if(destination == NULL || source == NULL)
+    {
+        fprintf(stderr, "The destination or/and source grids received by 'copy_non_zero_values' was a null pointer.\n");
+        return FAILURE;
+    }
+
+    for(int i = 0; i < cli_args.global_line_number; i++)
+    {
+        if(destination[i] == NULL || source[i] == NULL)
+        {
+            fprintf(stderr, "The line %d of destination or/and source in 'copy_non_zero_values' was a null pointer.\n", i);
+            return FAILURE;
+        }
+
+        for(int j = 0; j < cli_args.global_column_number; j++)
+        {
+            if(source[i][j] == 0)
+                continue;
+
+            destination[i][j] = source[i][j];
         }
     }
 

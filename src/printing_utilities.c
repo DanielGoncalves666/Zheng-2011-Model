@@ -116,9 +116,9 @@ void print_double_grid(Double_Grid double_grid)
 	for(int i = 0; i < cli_args.global_line_number; i++){
 		for(int h = 0; h < cli_args.global_column_number; h++){
 			if(double_grid[i][h] >= 1000.0)
-				printf("%.0lf\t", double_grid[i][h]);
+				printf("%5.0lf ", double_grid[i][h]);
 			else
-				printf("%5.1lf\t", double_grid[i][h]);
+				printf("%5.1lf ", double_grid[i][h]);
 		}
 		printf("\n\n");
 	}

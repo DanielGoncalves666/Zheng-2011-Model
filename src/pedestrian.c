@@ -55,7 +55,7 @@ Function_Status insert_pedestrians_at_random(int num_pedestrians_to_insert)
         return FAILURE;
     }
 
-    if(reset_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number) == FAILURE)
+    if(initialize_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number, 0) == FAILURE)
         return FAILURE;
 
     for(int p_index = 0; p_index < num_pedestrians_to_insert;)
@@ -165,7 +165,7 @@ void evaluate_pedestrians_movements()
         if(current_pedestrian->state != MOVING || current_pedestrian->in_panic == true)
             continue;
 
-        Cell destination_cell = find_smallest_cell(current_pedestrian->current, ! cli_args.always_move_to_lowest);
+        Cell destination_cell = find_smallest_cell(current_pedestrian->current, true);
 
         if(destination_cell.coordinates.lin == -1 && destination_cell.coordinates.col == -1)
         { 
@@ -424,7 +424,7 @@ bool is_environment_empty()
 */
 void update_pedestrian_position_grid()
 {
-    reset_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number);
+    initialize_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number, 0);
 
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
@@ -467,7 +467,7 @@ void reset_pedestrian_panic()
 */
 void reset_pedestrians_structures()
 {
-    reset_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number);
+    initialize_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number, 0);
     
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {

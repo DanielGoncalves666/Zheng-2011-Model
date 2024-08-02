@@ -80,6 +80,95 @@ Function_Status expand_exit(Exit original_exit, Location new_coordinates)
 }
 
 /**
+ * Allocates the final_floor_field grid.
+ * 
+ * @return Function_Status: FAILURE (0) or SUCCESS (1).
+*/
+Function_Status allocate_final_floor_field()
+{
+    exits_set.final_floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
+    if(exits_set.final_floor_field == NULL)
+    {
+        fprintf(stderr,"Failure during the allocation of the final_floor_field.\n");
+        return FAILURE;
+    }
+
+    return SUCCESS;
+}
+
+/**
+ * Calculates the static floor field as described in Annex A of Kirchner's 2002 article.
+ * 
+ * @return Function_Status: FAILURE (0) or SUCCESS (1).
+ */
+Function_Status calculate_kirchner_static_field()
+{
+    int num_exit_cells = 0; // The total number of exit cells.
+    Location *exit_cell_coordinates = NULL; // A list of all the exit cells coordinates.
+
+    initialize_double_grid(exits_set.static_floor_field, cli_args.global_line_number, cli_args.global_column_number, -1);
+    copy_non_zero_values(exits_set.static_floor_field, environment_only_grid); // Copies the structure of the environment
+
+    // Assign a value of -1 to all exit cells. Cells marked with -1 will have their static floor field values calculated next.
+    // Additionally, construct a list containing the coordinates of all exit cells to simplify further processing.
+    for(int exit_index = 0; exit_index < exits_set.num_exits; exit_index++) 
+    {
+        Exit current_exit = exits_set.list[exit_index];
+        for(int cell_index = 0; cell_index < current_exit->width; cell_index++)
+        {
+            Location current_cell = current_exit->coordinates[cell_index];
+            exits_set.static_floor_field[current_cell.lin][current_cell.col] = -1;
+
+            exit_cell_coordinates = realloc(exit_cell_coordinates, sizeof(Location) * (num_exit_cells + 1));
+            if(exit_cell_coordinates == NULL)
+            {
+                fprintf(stderr, "Failure in the realloc of the exit_cells_coordinates list.\n");
+                return FAILURE;
+            }
+
+            exit_cell_coordinates[num_exit_cells] = current_cell;
+            num_exit_cells++;
+        }
+    }
+
+    double maximum_value = -1; // The maximum euclidean distance for any cell to an exit.
+    for(int i = 0; i < cli_args.global_line_number; i++)
+    {
+        for(int j = 0; j < cli_args.global_column_number; j++)
+        {
+            if(exits_set.static_floor_field[i][j] == WALL_VALUE)
+                continue;
+
+            for(int cell_index = 0; cell_index < num_exit_cells; cell_index++)
+            {
+                Location current_exit_cell = exit_cell_coordinates[cell_index]; // The current exit cell being used as the reference.
+                double distance_to_exit = euclidean_distance(current_exit_cell, (Location) {i,j});
+
+                if(exits_set.static_floor_field[i][j] == -1 || distance_to_exit < exits_set.static_floor_field[i][j])
+                    exits_set.static_floor_field[i][j] = distance_to_exit;
+            }
+
+            if(exits_set.static_floor_field[i][j] > maximum_value)
+                maximum_value = exits_set.static_floor_field[i][j];
+        }
+    }
+
+    for(int i = 0; i < cli_args.global_line_number; i++)
+    {
+        for(int j = 0; j < cli_args.global_column_number; j++)
+        {
+            if(exits_set.static_floor_field[i][j] == WALL_VALUE)
+                continue; 
+
+            double normalized_distance = maximum_value - exits_set.static_floor_field[i][j];
+            exits_set.static_floor_field[i][j] = normalized_distance;
+        }
+    }
+
+    return SUCCESS;
+}
+
+/**
  * Calculates the static weights of every exit in the exits_set.
  * 
  * @return Function_Status: FAILURE (0), SUCCESS (1) or INACCESSIBLE_EXIT(2).
@@ -146,25 +235,6 @@ Function_Status calculate_all_exits_floor_field()
     return SUCCESS;
 }
 
-
-/**
- * Allocates the final_floor_field grid.
- * 
- * @return Function_Status: FAILURE (0) or SUCCESS (1).
-*/
-Function_Status allocate_final_floor_field()
-{
-    exits_set.final_floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
-    if(exits_set.final_floor_field == NULL)
-    {
-        fprintf(stderr,"Failure during the allocation of the final_floor_field.\n");
-        return FAILURE;
-    }
-
-    return SUCCESS;
-}
-
-
 /**
  * Merge the floor_fields of all the exits in the exits_set. The result of this merge is stored at exits_set.final_floor_field.
  * 
@@ -178,7 +248,7 @@ Function_Status calculate_final_floor_field()
         return FAILURE;
     }
 
-    if( reset_double_grid(exits_set.final_floor_field, cli_args.global_line_number, cli_args.global_column_number) == FAILURE)
+    if( initialize_double_grid(exits_set.final_floor_field, cli_args.global_line_number, cli_args.global_column_number, 0) == FAILURE)
         return FAILURE;
 
     Double_Grid current_exit = exits_set.list[0]->floor_field;
@@ -436,6 +506,8 @@ static Function_Status calculate_exit_floor_field(Exit current_exit)
 */
 static void initialize_static_weight_grid(Exit current_exit)
 {
+    // SE current_exit for NULL, incluir todas as saídas na grid que deverá ser passada.
+
     // Add walls and obstacles to the static weight grid.
     for(int i = 0; i < cli_args.global_line_number; i++)
     {

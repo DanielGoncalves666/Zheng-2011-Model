@@ -8,6 +8,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<stdbool.h>
+#include<math.h>
 
 #include"../headers/grid.h"
 #include"../headers/cli_processing.h"
@@ -45,4 +46,16 @@ bool origin_uses_static_exits()
 {
     return cli_args.environment_origin == STRUCTURE_AND_DOORS || 
            cli_args.environment_origin == STRUCTURE_DOORS_AND_PEDESTRIANS;
+}
+
+/**
+ * Calculates the Euclidean distance between the provided coordinates.
+ * @param first The first pair of coordinates.
+ * @param second The second pair of coordinates.
+ * 
+ * @return A double, the euclidean distance between the two pair of coordinates provided.
+ */
+double euclidean_distance(Location first, Location second)
+{
+    return sqrt(pow(first.lin - second.lin, 2) + pow(first.col - second.col, 2));
 }

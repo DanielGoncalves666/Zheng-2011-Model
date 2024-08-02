@@ -24,7 +24,6 @@
 static Function_Status run_simulations(FILE *output_file);
 static Function_Status conflict_solving();
 static void deallocate_program_structures(FILE *output_file, FILE *auxiliary_file);
-static double calculate_delta();
 
 int main(int argc, char **argv)
 {
@@ -103,6 +102,14 @@ int main(int argc, char **argv)
         if(allocate_final_floor_field() == FAILURE)
             return END_PROGRAM;
 
+        // exits_set.static_floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
+        // calculate_kirchner_static_field();
+
+        // print_double_grid(exits_set.static_floor_field);
+
+        // return END_PROGRAM;
+
+
         // The actual simulation happens here.
         if(run_simulations(output_file) == FAILURE)
             return END_PROGRAM;
@@ -110,13 +117,13 @@ int main(int argc, char **argv)
         if(origin_uses_auxiliary_data() == true)
             deallocate_exits();
 
-        if(cli_args.output_format == OUTPUT_TIMESTEPS_COUNT || cli_args.output_format == OUTPUT_DISTRIBUTION_VARIATION)
+        if(cli_args.output_format == OUTPUT_TIMESTEPS_COUNT)
             fprintf(output_file, "\n");
 
         if(cli_args.output_format == OUTPUT_HEATMAP)
         {
             print_heatmap(output_file);        
-            reset_integer_grid(heatmap_grid, cli_args.global_line_number, cli_args.global_column_number);
+            initialize_integer_grid(heatmap_grid, cli_args.global_line_number, cli_args.global_column_number,0);
         }     
 
         print_execution_status(simulation_set_index, simulation_set_quantity);
@@ -139,8 +146,7 @@ int main(int argc, char **argv)
 */
 static Function_Status run_simulations(FILE *output_file)
 {
-    if(cli_args.single_exit_flag == true && exits_set.num_exits == 1 && 
-        (cli_args.output_format == OUTPUT_TIMESTEPS_COUNT || cli_args.output_format == OUTPUT_DISTRIBUTION_VARIATION))
+    if(cli_args.single_exit_flag == true && exits_set.num_exits == 1 && cli_args.output_format == OUTPUT_TIMESTEPS_COUNT)
     {
         fprintf(output_file, "#1 "); // simulation set where the exit was combined with itself. Used to correct errors in the plotting program.
     }
@@ -179,10 +185,6 @@ static Function_Status run_simulations(FILE *output_file)
             if(cli_args.show_debug_information)
                 print_double_grid(exits_set.final_floor_field);
 
-            if(cli_args.output_format == OUTPUT_DISTRIBUTION_VARIATION)
-                break; 
-            // The delta calculation only requires that the static and dynamic weights have already been calculated (for the first timestep).
-
             evaluate_pedestrians_movements();
             determine_pedestrians_in_panic();
             
@@ -217,9 +219,6 @@ static Function_Status run_simulations(FILE *output_file)
 
         if(cli_args.output_format == OUTPUT_TIMESTEPS_COUNT)
             fprintf(output_file,"%d ", number_timesteps);
-
-        if(cli_args.output_format == OUTPUT_DISTRIBUTION_VARIATION)
-            fprintf(output_file,"%.3lf ", calculate_delta());
     }
 
     return SUCCESS;
@@ -268,36 +267,4 @@ static void deallocate_program_structures(FILE *output_file, FILE *auxiliary_fil
     deallocate_grid((void **) environment_only_grid,cli_args.global_line_number);
     deallocate_grid((void **) pedestrian_position_grid,cli_args.global_line_number);
     deallocate_grid((void **) heatmap_grid,cli_args.global_line_number);
-}
-
-/**
- * Calculates the value of delta (static delta or first timestep delta).
- * Delta is a value between 0 and 1 (inclusive) that indicates the distribution of pedestrians between two exits in an environment. Values close to 0 indicate a balanced preference between both doors, while values close to 1 indicate a strong preference of pedestrians for one exit over the other.
- * 
- * @return The calculated delta, as a double.
-*/
-static double calculate_delta()
-{
-    if(exits_set.num_exits != 2)
-        return 1; // The delta is calculated only for situations where the environments has two exits.
-                  // All other cases, with a single exit in particular, will receive a value of 1.
-
-    // Alpha == 0 indicates that the static delta is required.
-    Double_Grid exit_A = cli_args.alpha == 0 ? exits_set.list[0]->static_weight : exits_set.list[0]->floor_field;
-    Double_Grid exit_B = cli_args.alpha == 0 ? exits_set.list[1]->static_weight : exits_set.list[1]->floor_field;
-
-    int N_A = 0; // The number of cells where the floor field of exit_A is greater or equal to the floor field of exit_B. 
-    for(int i = 0; i < cli_args.global_line_number; i++)
-    {
-        for(int h = 0; h < cli_args.global_column_number; h++)
-        {
-            if(exit_A[i][h] == WALL_VALUE || exit_A[i][h] == EXIT_VALUE || exit_B[i][h] == EXIT_VALUE)
-                continue;
-
-            if(pedestrian_position_grid[i][h] != 0 && exit_B[i][h] <= exit_A[i][h] + TOLERANCE)
-                N_A++;
-        }
-    }
-
-    return 1.0 - (fmin(N_A, pedestrian_set.num_pedestrians - N_A) / fmax(N_A, pedestrian_set.num_pedestrians - N_A));
 }

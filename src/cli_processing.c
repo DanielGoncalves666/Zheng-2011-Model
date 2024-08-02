@@ -1,5 +1,5 @@
 /* 
-   File: grid.c
+   File: cli_processing.c
    Author: Daniel Gonçalves
    Date: 2024-05-20
    Description: This module contains the declaration of a struct that holds all the command line arguments, as well as the initial assignment of an instance. Furthermore, all necessary structs, documentation, and functions for the use of argp are defined.
@@ -14,8 +14,8 @@
 
 #include"../headers/cli_processing.h"
 
-const char * argp_program_version = "Implementation of the Alizadeh model for pedestrian evacuation using cellular automata.";
-const char doc[] = "Alizadeh - Simulates pedestrian evacuation using the Alizadeh (2011) model."
+const char * argp_program_version = "Implementation of the Kirchner model for pedestrian evacuation using cellular automata.";
+const char doc[] = "kirchner - Simulates pedestrian evacuation using the Kirchner (2002) model."
 "\v"
 "If no file is provided with --env-file, the varas_queue.txt file will be used.\n"
 "The file provided with --auxiliary-file must contain, on each line, the coordinates of the exits for a single simulation set. The syntax to be used is described in the project's readme.\n"
@@ -34,10 +34,10 @@ const char doc[] = "Alizadeh - Simulates pedestrian evacuation using the Alizade
 "\t 1 - (default) Visual print of the environment.\n"
 "\t 2 - Number of timesteps required for the termination of each simulation.\n"
 "\t 3 - Heatmap of the environment cells.\n"
-"\t 4 - Variation in the pedestrian distribution (at the beginning of the simulation) between two doors.\n"
-"Choice 4 generates numbers between 0 and 1, where values close to 0 indicate a uniform distribution between both doors and values close to 1 indicate a uneven distribution.\n"
 "\n"
-"The --alpha option indicates the importance of the dynamic weight in calculating the floor field value for each cell. Its default value of 0 means that the dynamic weight doesn't matter, and the model behaves the same as the Varas (2007) model.\n"
+"If all Kirchner constants are provided (with the --ped option counting as --density), the program will perform simulations varying only the simulation sets.\n"
+"Alternatively, if only four constants are provided, the program will perform simulations varying the missing constant. In this case, the --min, --max, and --step options define the range and increment step for that constant.\n"
+"Finally, if three or fewer constants are provided, the program will use default values for the remaining constants.\n"
 "\n"
 "Unnecessary options for some --env-load-method are ignored.\n";
 
@@ -47,11 +47,17 @@ const char doc[] = "Alizadeh - Simulates pedestrian evacuation using the Alizade
 #define OPT_DEBUG 1002
 #define OPT_SIMULATION_SET_INFO 1003
 #define OPT_IMMEDIATE_EXIT 1004
-#define OPT_ALWAYS_TO_LOWEST 1005
 #define OPT_AVOID_CORNER_MOVEMENT 1006
 #define OPT_ALLOW_X_MOVEMENT 1007
 #define OPT_SINGLE_EXIT_FLAG 1008
-#define OPT_ALPHA 1009
+#define OPT_PEDESTRIAN_DENSITY 1009
+#define OPT_ALPHA 1010
+#define OPT_DELTA 1011
+#define OPT_STATIC_COUPLING 1012
+#define OPT_DYNAMIC_COUPLING 1013
+#define OPT_MIN_SIMULATION_VALUE 2000
+#define OPT_MAX_SIMULATION_VALUE 2001
+#define OPT_STEP_VALUE 2002
 
 struct argp_option options[] = {
     {"\nFiles:\n",0,0,OPTION_DOC,0,1},
@@ -68,22 +74,34 @@ struct argp_option options[] = {
     {"col", 'c', "COLUMNS", 0, "Number of columns for the environment when it is being created."},
 
     {"\nSimulation Variables (optional):\n",0,0,OPTION_DOC,0,7},
-    {"ped", 'p', "PEDESTRIANS", 0, "Number of pedestrians to be randomly placed in the environment (default is 1).",8},
-    {"simu", 's', "SIMULATIONS", 0, "Number of simulations for each simulation set (default is 1)."},
+    {"simu", 's', "SIMULATIONS", 0, "Number of simulations for each simulation set (default is 1).",8},
     {"seed", OPT_SEED, "SEED", 0, "Initial seed for the srand function (default is 0)."},
     {"diagonal", OPT_DIAGONAL, "DIAGONAL", 0, "The diagonal value for calculation of the static floor field (default is 1.5)."},
-    {"alpha", OPT_ALPHA, "ALPHA", 0, "Coefficient of crowd avoidance (default is 0).", 8},
 
-    {"\nToggle Options (optional):\n",0,0,OPTION_DOC,0,9},
-    {"debug", OPT_DEBUG, 0,0 , "Prints debug information to stdout.",10},
-    {"simulation-set-info", OPT_SIMULATION_SET_INFO, 0, 0, "Prints simulation set information (exits coordinates) to the output file."},
+    {"\nVariables and toggle options related to pedestrians (all optional):\n",0,0,OPTION_DOC,0,9},
+    {"ped", 'p', "PEDESTRIANS", 0, "Manually set the number of pedestrians to be randomly placed in the environment. If provided takes precedence over --density.",10},
     {"immediate-exit", OPT_IMMEDIATE_EXIT, 0,0, "The pedestrians will exit the environment the moment they reach an exit, instead of waiting a timestep in the LEAVING state."},
-    {"always-to-lowest", OPT_ALWAYS_TO_LOWEST, 0,0, "The pedestrians will always try to move to the lowest cell in their neighborhood. If it is occupied, they will wait for it to become empty."},
     {"avoid-corner-movement",OPT_AVOID_CORNER_MOVEMENT,0,0, "Prevents movement in the corners of walls and obstacles. A single diagonal movement through the corner of a obstacle becomes three movements."},
     {"allow-x-movement",OPT_ALLOW_X_MOVEMENT,0,0, "The movement of pedestrians isn't restricted when X movements occur."},
+
+    {"\nKirchner model constants:\n",0,0,OPTION_DOC,0, 11},
+    {"density", OPT_PEDESTRIAN_DENSITY, "DENSITY", 0, "The percentage of unoccupied cells in the environment that should be filled by pedestrians. Defaults to 0.3.",12},
+    {"alpha", OPT_ALPHA, "ALPHA", 0, "The probability that a particle in the dynamic floor field will undergo diffusion. Value must be between 0 and 1, both inclusive. Defaults to 0.5."},
+    {"delta", OPT_DELTA, "DELTA", 0, "The probability that a particle in the dynamic floor field will decay. Value must be between 0 and 1, both inclusive. Defaults to 0.5."},
+    {"ks", OPT_STATIC_COUPLING, "KS", 0, "The static field coupling constant that determines the strength of the static floor field when calculating the transition probabilities for pedestrians. Must be non-negative. Defaults to 0.5. Defaults to 1."},
+    {"kd", OPT_DYNAMIC_COUPLING, "KD", 0, "The dynamic field coupling constant that determines the strength of the dynamic floor field when calculating the transition probabilities for pedestrians. Must be non-negative. Defaults to 0.5. Defaults to 1."},
+    
+    {"\nRange values for simulation focused on a constant:\n",0,0,OPTION_DOC,0, 13},
+    {"min", OPT_MIN_SIMULATION_VALUE, "MIN", 0, "The minimum value that the variable constant will assume. Defaults to 0.", 14},
+    {"max", OPT_MAX_SIMULATION_VALUE, "MAX", 0, "The maximum value that the variable constant will assume. Defaults to 1."},
+    {"step", OPT_STEP_VALUE, "STEP", 0, "The step value for incrementing the variable constant. Defaults to 0.01"},
+
+    {"\nToggle Options (optional):\n",0,0,OPTION_DOC,0, 15},
+    {"debug", OPT_DEBUG, 0,0 , "Prints debug information to stdout.",16},
+    {"simulation-set-info", OPT_SIMULATION_SET_INFO, 0, 0, "Prints simulation set information (exits coordinates) to the output file."},
     {"single-exit-flag", OPT_SINGLE_EXIT_FLAG, 0,0, "Prints a flag (#1) before the results for every simulation set that has only one exit."},
 
-    {"\nAdditional Information:\n",0,0,OPTION_DOC,0,11},
+    {"\nAdditional Information:\n",0,0,OPTION_DOC,0,17},
     {0}
 };
 
@@ -96,21 +114,28 @@ Command_Line_Args cli_args = {
     .auxiliary_filename="",
     .output_format = OUTPUT_VISUALIZATION,
     .environment_origin = STRUCTURE_DOORS_AND_PEDESTRIANS,
+    .simulation_type = SIMULATION_DOOR_LOCATION_ONLY,
     .write_to_file=false,
     .show_debug_information=false,
     .show_simulation_set_info=false,
     .immediate_exit=false,
-    .always_move_to_lowest=false,
     .prevent_corner_crossing=false,
     .allow_X_movement = false,
     .single_exit_flag = false,
     .global_line_number = 0,
     .global_column_number = 0,
     .num_simulations = 1, // A single simulation by default.
-    .total_num_pedestrians = 1,
+    .total_num_pedestrians = -1,
     .seed = 0,
-    .alpha = 0.0,
-    .diagonal = 1.5
+    .diagonal = 1.5,
+    .alpha=0.5,
+    .delta=0.5,
+    .ks=1,
+    .kd=1,
+    .density=0.3,
+    .min=0,
+    .max=1,
+    .step=0.01
 };
 // When loading an environment global_line_number and global_column_number will no be obtained from the command line arguments. Besides, total_num_pedestrians will be automatic determined by the program on some environment origin formats.
 
@@ -126,6 +151,11 @@ Command_Line_Args cli_args = {
 */
 error_t parser_function(int key, char *arg, struct argp_state *state)
 {
+    static char kirchner_constants = 0;
+    // A character that will be used to track which Kirchner constants (including pedestrian density or number of pedestrians) were provided by the user.
+    // The 5 least significant bits of this char will be used to indicate whether the values for density (or number of pedestrians), alpha, delta, ks, and kd were provided, in that order.
+    static int num_constants = 0; // The number of constants that were provided.
+
     Command_Line_Args *cli_args = state->input;
 
     extract_full_command(cli_args->full_command, key, arg);
@@ -140,7 +170,7 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
             break;
         case 'O':
             int output_format = atoi(arg);
-            if(output_format < OUTPUT_VISUALIZATION || output_format > OUTPUT_DISTRIBUTION_VARIATION)
+            if(output_format < OUTPUT_VISUALIZATION || output_format > OUTPUT_HEATMAP)
             {
                 fprintf(stderr, "Invalid output format.\n");
                 return EIO;
@@ -186,6 +216,13 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
                 fprintf(stderr, "The number of pedestrians must be positive.\n");
                 return EIO;
             }
+
+            if((kirchner_constants & 16U) == 0)
+            {
+                num_constants++;
+                kirchner_constants ^= 16U;
+            }
+            
             break;
         case 's':
             cli_args->num_simulations = atoi(arg);
@@ -211,9 +248,6 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
                 return EIO;
             }
             break;
-        case OPT_ALPHA:
-            cli_args->alpha = atof(arg); 
-            break;
         case OPT_DEBUG:
             cli_args->show_debug_information = true;
             break;
@@ -223,9 +257,6 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
         case OPT_IMMEDIATE_EXIT:
             cli_args->immediate_exit = true;
             break;
-        case OPT_ALWAYS_TO_LOWEST:
-            cli_args->always_move_to_lowest = true;
-            break;
         case OPT_AVOID_CORNER_MOVEMENT:
             cli_args->prevent_corner_crossing = true;
             break;
@@ -234,6 +265,95 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
             break;
         case OPT_SINGLE_EXIT_FLAG:
             cli_args->single_exit_flag = true;
+            break;
+        case OPT_PEDESTRIAN_DENSITY:
+            cli_args->density = atof(arg);
+            if(cli_args->density < 0 || cli_args->density > 1)
+            {
+                fprintf(stderr, "The Pedestrian density must be in the [0,1] range.\n");
+                return EIO;
+            }  
+
+            if((kirchner_constants & 16U) == 0)
+            {
+                num_constants++;
+                kirchner_constants ^= 16U;
+            }
+
+            break;
+        case OPT_ALPHA:
+            cli_args->alpha = atof(arg);
+            if(cli_args->alpha < 0 || cli_args->alpha > 1)
+            {
+                fprintf(stderr, "The diffusion (alpha) probability must be in the [0,1] range.\n");
+                return EIO;
+            } 
+
+            if((kirchner_constants & 8U) == 0)
+            {
+                num_constants++;
+                kirchner_constants ^= 8U;
+            }
+
+            break;
+        case OPT_DELTA:
+            cli_args->delta = atof(arg);
+            if(cli_args->delta < 0 || cli_args->delta > 1)
+            {
+                fprintf(stderr, "The decay (delta) probability must be in the [0,1] range.\n");
+                return EIO;
+            } 
+
+            if((kirchner_constants & 4U) == 0)
+            {
+                num_constants++;
+                kirchner_constants ^= 4U;
+            }
+
+            break;    
+        case OPT_STATIC_COUPLING:
+            cli_args->ks = atof(arg);
+            if(cli_args->ks < 0)
+            {
+                fprintf(stderr, "The static field coupling constant must be a non-negative value.\n");
+                return EIO;
+            }
+            
+            if((kirchner_constants & 2U) == 0)
+            {
+                num_constants++;
+                kirchner_constants ^= 2U;
+            }
+
+            break;
+        case OPT_DYNAMIC_COUPLING:
+            cli_args->kd = atof(arg);
+            if(cli_args->kd < 0)
+            {
+                fprintf(stderr, "The dynamic field coupling constant must be a non-negative value.\n");
+                return EIO;
+            } 
+
+            if((kirchner_constants & 1U) == 0)
+            {
+                num_constants++;
+                kirchner_constants ^= 1U;
+            }
+
+            break;
+        case OPT_MIN_SIMULATION_VALUE:
+            cli_args->min = atof(arg);
+            break;
+        case OPT_MAX_SIMULATION_VALUE:
+            cli_args->max = atof(arg);
+            break;
+        case OPT_STEP_VALUE:
+            cli_args->step = atof(arg);
+            if(cli_args->step <= 0)
+            {
+                fprintf(stderr, "The step value must be a positive number.\n");
+                return EIO;
+            }
             break;
         case ARGP_KEY_ARG:
             fprintf(stderr, "No positional argument was expect, but %s was given.\n", arg);
@@ -260,6 +380,24 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
                 {
                     fprintf(stderr, "Environment dimensions were expect, but not provided.\n");
                     return EIO;
+                }
+            }
+
+            if(cli_args->min > cli_args->max)
+            {
+                fprintf(stderr, "The value provided to the --min option must be lower than the value provided to the --max option.\n");
+                return EIO;
+            } 
+
+            if(num_constants == 4)
+            {
+                for(int shift = 0; shift < 5; shift++)
+                {
+                    if( (kirchner_constants & (16U >> shift)) == 0 )
+                    {
+                        cli_args->simulation_type = (enum Simulation_Type) shift;
+                        break;
+                    }
                 }
             }
 
@@ -295,9 +433,6 @@ void extract_full_command(char *full_command, int key, char *arg)
         case OPT_IMMEDIATE_EXIT:
             sprintf(aux, " --immediate-exit");
             break;
-        case OPT_ALWAYS_TO_LOWEST:
-            sprintf(aux, " --always-to-lowest");
-            break;
         case OPT_AVOID_CORNER_MOVEMENT:
             sprintf(aux, " --avoid-corner-movement");
             break;
@@ -313,8 +448,29 @@ void extract_full_command(char *full_command, int key, char *arg)
         case OPT_DIAGONAL:
             sprintf(aux, " --diagonal=%s", arg);
             break;
+        case OPT_PEDESTRIAN_DENSITY:
+            sprintf(aux, " --density=%s", arg);
+            break;
         case OPT_ALPHA:
-            sprintf(aux, " --alpha=%s",arg);
+            sprintf(aux, " --alpha=%s", arg);
+            break;
+        case OPT_DELTA:
+            sprintf(aux, " --delta=%s", arg);
+            break;
+        case OPT_STATIC_COUPLING:
+            sprintf(aux, " --ks=%s", arg);
+            break;
+        case OPT_DYNAMIC_COUPLING:
+            sprintf(aux, " --kd=%s", arg);
+            break;
+        case OPT_MIN_SIMULATION_VALUE:
+            sprintf(aux, " --min=%s", arg);
+            break;
+        case OPT_MAX_SIMULATION_VALUE:
+            sprintf(aux, " --max=%s", arg);
+            break;
+        case OPT_STEP_VALUE:
+            sprintf(aux, " --step=%s", arg);
             break;
         case 'o':
         case 'O':

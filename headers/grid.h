@@ -10,9 +10,10 @@ typedef double ** Double_Grid;
 
 Int_Grid allocate_integer_grid(int line_number, int column_number);
 Double_Grid allocate_double_grid(int line_number, int column_number);
-Function_Status reset_integer_grid(Int_Grid integer_grid, int line_number, int column_number);
-Function_Status reset_double_grid(Double_Grid double_grid, int line_number, int column_number);
+Function_Status initialize_integer_grid(Int_Grid integer_grid, int line_number, int column_number, int value);
+Function_Status initialize_double_grid(Double_Grid double_grid, int line_number, int column_number, double value);
 Function_Status copy_double_grid(Double_Grid destination, Double_Grid source);
+Function_Status copy_non_zero_values(Double_Grid destination, Int_Grid source);
 bool is_diagonal_valid(Location origin_cell, Location target_cell, Double_Grid floor_field);
 bool is_within_grid_lines(int line_coordinate);
 bool is_within_grid_columns(int column_coordinate);
