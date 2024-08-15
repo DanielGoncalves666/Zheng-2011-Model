@@ -10,5 +10,6 @@ Function_Status load_environment();
 Function_Status generate_environment();
 int extract_simulation_set_quantity(FILE *auxiliary_file);
 Function_Status get_next_simulation_set(FILE *auxiliary_file, int *exit_number);
+int count_number_empty_cells();
 
 #endif

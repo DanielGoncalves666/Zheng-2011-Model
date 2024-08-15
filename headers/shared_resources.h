@@ -39,12 +39,15 @@ typedef struct{
     int col;
 }Location;
 
-#define EXIT_VALUE 1
-#define WALL_VALUE -1000
+#define WALL_CELL -1000
+#define EXIT_CELL -1001
+#define EMPTY_CELL -1002
 
 bool origin_uses_auxiliary_data();
 bool origin_uses_static_pedestrians();
 bool origin_uses_static_exits();
 double euclidean_distance(Location first, Location second);
+float rand_within_limits(float min, float max);
+bool probability_test(double probability);
 
 #endif

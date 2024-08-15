@@ -13,7 +13,8 @@
 #include"../headers/cli_processing.h"
 #include"../headers/shared_resources.h"
 
-Int_Grid environment_only_grid = NULL; // Grid containing only the structure and exits.
+Int_Grid environment_only_grid = NULL; // Grid containing only the structure and obstacles.
+Int_Grid exits_only_grid = NULL; // Grid containing only the exits.
 Int_Grid pedestrian_position_grid = NULL; // Grid containing pedestrians at their respective positions.
 Int_Grid heatmap_grid = NULL; // Grid containing the count of pedestrian visits per cell.
 
@@ -105,11 +106,11 @@ Double_Grid allocate_double_grid(int line_number, int column_number)
  * 
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
  */
-Function_Status initialize_integer_grid(Int_Grid integer_grid, int line_number, int column_number, int value)
+Function_Status fill_integer_grid(Int_Grid integer_grid, int line_number, int column_number, int value)
 {
     if(integer_grid == NULL)
     {
-        fprintf(stderr, "The Int_Grid passed to 'initialize_integer_grid' was a NULL pointer.\n");
+        fprintf(stderr, "The Int_Grid passed to 'fill_integer_grid' was a NULL pointer.\n");
         return FAILURE;
     }
 
@@ -138,11 +139,11 @@ Function_Status initialize_integer_grid(Int_Grid integer_grid, int line_number, 
  * 
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
  */
-Function_Status initialize_double_grid(Double_Grid double_grid, int line_number, int column_number, double value)
+Function_Status fill_double_grid(Double_Grid double_grid, int line_number, int column_number, double value)
 {
     if(double_grid == NULL)
     {
-        fprintf(stderr, "The Double_Grid passed to 'initialize_double_grid' was a NULL pointer.\n");
+        fprintf(stderr, "The Double_Grid passed to 'fill_double_grid' was a NULL pointer.\n");
         return FAILURE;
     }
 
@@ -150,7 +151,7 @@ Function_Status initialize_double_grid(Double_Grid double_grid, int line_number,
     {
         if(double_grid[i] == NULL)
         {
-            fprintf(stderr, "The line %d of the Double_Grid passed to 'initialize_double_grid' was a NULL pointer.\n", i);
+            fprintf(stderr, "The line %d of the Double_Grid passed to 'fill_double_grid' was a NULL pointer.\n", i);
             return FAILURE;
         }
 
@@ -196,19 +197,19 @@ Function_Status copy_double_grid(Double_Grid destination, Double_Grid source)
 }
 
 /**
- * Copy the non zero values of the source grid to the destination grid.
+ * Copy the cells with structures (Walls and obstacles) from the source grid to the destination grid.
  *
  * @param destination Double grid where the content is to be copied.
- * @param source Int grid to be copied.
+ * @param source Int grid fro which the data will be extracted.
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
  * 
  * @note Both grids must be of global size (lines and columns). Otherwise, undefined behavior will happen.
  */
-Function_Status copy_non_zero_values(Double_Grid destination, Int_Grid source)
+Function_Status copy_grid_structure(Double_Grid destination, Int_Grid source)
 {
     if(destination == NULL || source == NULL)
     {
-        fprintf(stderr, "The destination or/and source grids received by 'copy_non_zero_values' was a null pointer.\n");
+        fprintf(stderr, "The destination or/and source grids received by 'copy_grid_structure' was a null pointer.\n");
         return FAILURE;
     }
 
@@ -216,16 +217,52 @@ Function_Status copy_non_zero_values(Double_Grid destination, Int_Grid source)
     {
         if(destination[i] == NULL || source[i] == NULL)
         {
-            fprintf(stderr, "The line %d of destination or/and source in 'copy_non_zero_values' was a null pointer.\n", i);
+            fprintf(stderr, "The line %d of destination or/and source in 'copy_grid_structure' was a null pointer.\n", i);
             return FAILURE;
         }
 
         for(int j = 0; j < cli_args.global_column_number; j++)
         {
-            if(source[i][j] == 0)
+            if(source[i][j] == EMPTY_CELL)
                 continue;
 
             destination[i][j] = source[i][j];
+        }
+    }
+
+    return SUCCESS;
+}
+
+/**
+ * Iterates through each cell in the source grid and adds its value to the corresponding
+ * cell in the destination grid. The result is stored in place within the destination grid.
+ * 
+ * @param destinationThe The grid that will be updated with the summed values.
+ * @param second he grid that provides the values to be added to the destination grid.
+ * 
+ * @return Function_Status: FAILURE (0) or SUCCESS (1).
+ * 
+ * @note Both grids must be of global size (lines and columns). Otherwise, undefined behavior will happen.
+ */
+Function_Status sum_grids(Int_Grid destination, Int_Grid source)
+{
+    if(destination == NULL || source == NULL)
+    {
+        fprintf(stderr, "The destination or/and source grids received by 'sum_grids' was a null pointer.\n");
+        return FAILURE;
+    }
+
+    for(int i = 0; i < cli_args.global_line_number; i++)
+    {
+        if(destination[i] == NULL || source[i] == NULL)
+        {
+            fprintf(stderr, "The line %d of destination or/and source in 'sum_grids' was a null pointer.\n", i);
+            return FAILURE;
+        }
+
+        for(int j = 0; j < cli_args.global_column_number; j++)
+        {
+            destination[i][j] += source[i][j];
         }
     }
 
@@ -250,13 +287,13 @@ bool is_diagonal_valid(Location origin_cell, Location coordinate_modifier, Doubl
     bool is_vertical_blocked = false;// Indicates if the vertical cell in the origin_cell's neighborhood, which is adjacent to origin_cell + coordinate_modifier, is blocked.
 
     if(is_within_grid_lines(origin_cell.lin + coordinate_modifier.lin) && 
-    floor_field[origin_cell.lin + coordinate_modifier.lin][origin_cell.col] == WALL_VALUE)
+    floor_field[origin_cell.lin + coordinate_modifier.lin][origin_cell.col] == WALL_CELL)
     {
         is_vertical_blocked = true;
     }
 
     if(is_within_grid_columns(origin_cell.col + coordinate_modifier.col) && 
-    floor_field[origin_cell.lin][origin_cell.col + coordinate_modifier.col] == WALL_VALUE)
+    floor_field[origin_cell.lin][origin_cell.col + coordinate_modifier.col] == WALL_CELL)
     {
         is_horizontal_blocked = true;
     }
@@ -291,6 +328,27 @@ bool is_within_grid_lines(int line_coordinate)
 bool is_within_grid_columns(int column_coordinate)
 {
     return column_coordinate >= 0 && column_coordinate < cli_args.global_column_number;
+}
+
+
+/**
+ * Verifies if the cell in the given location is empty (i.e., not occupied by a pedestrian, door, obstacle or wall).
+ * 
+ * @param coordinates The coordinates of the cell
+ * @return bool, where True indicates that the cell is indeed empty, or False otherwise.
+ */
+bool is_cell_empty(Location coordinates)
+{
+    if(pedestrian_position_grid[coordinates.lin][coordinates.col] != 0)
+        return false;
+
+    if(environment_only_grid[coordinates.lin][coordinates.col] != EMPTY_CELL)
+        return false;
+
+    if(exits_only_grid[coordinates.lin][coordinates.col] != EMPTY_CELL)
+        return false;
+
+    return true;
 }
 
 /**

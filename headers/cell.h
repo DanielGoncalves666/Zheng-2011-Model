@@ -10,7 +10,6 @@ typedef struct{
     double value;
 }Cell;
 
-Cell find_smallest_cell(Location ped_coordinates, bool unoccupied_only);
 int count_cells_with_smaller_value(Cell *cell_list, int list_length, double searched_value, int *equal_quantity);
 void quick_sort(Cell *cell_list, int start_index, int end_index);
 

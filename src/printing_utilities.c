@@ -71,15 +71,15 @@ void print_pedestrian_position_grid(FILE *output_stream, int simulation_number, 
 	if(output_stream != NULL)
 	{
 		for(int i = 0; i < cli_args.global_line_number; i++){
-			for(int h = 0; h < cli_args.global_column_number; h++)
+			for(int j = 0; j < cli_args.global_column_number; j++)
 			{
-				if(pedestrian_position_grid[i][h] != 0)
+				if(pedestrian_position_grid[i][j] != 0)
 					fprintf(output_stream,"👤");
-				else if(exits_set.final_floor_field[i][h] == EXIT_VALUE)
+				else if(exits_only_grid[i][j] == EXIT_CELL)
 					fprintf(output_stream,"🚪");
-				else if(exits_set.final_floor_field[i][h] == WALL_VALUE)
+				else if(exits_set.static_floor_field[i][j] == WALL_CELL)
 					fprintf(output_stream,"🧱");
-				else if(pedestrian_position_grid[i][h] == 0)
+				else if(pedestrian_position_grid[i][j] == 0)
 					fprintf(output_stream,"⬛");
 			}
 			fprintf(output_stream,"\n");

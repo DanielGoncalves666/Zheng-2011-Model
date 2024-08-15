@@ -122,10 +122,11 @@ Command_Line_Args cli_args = {
     .prevent_corner_crossing=false,
     .allow_X_movement = false,
     .single_exit_flag = false,
+    .use_density = true,
     .global_line_number = 0,
     .global_column_number = 0,
     .num_simulations = 1, // A single simulation by default.
-    .total_num_pedestrians = -1,
+    .total_num_pedestrians = 0,
     .seed = 0,
     .diagonal = 1.5,
     .alpha=0.5,
@@ -222,6 +223,8 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
                 num_constants++;
                 kirchner_constants ^= 16U;
             }
+
+            cli_args->use_density = false;
             
             break;
         case 's':
@@ -492,4 +495,29 @@ void extract_full_command(char *full_command, int key, char *arg)
     }
 
     strcat(full_command, aux);
+}
+
+/**
+ * Returns a pointer to the variable that holds the constant that needs to vary. If no constant will vary, a NULL pointer is returned.
+ * 
+ * @return A pointer to a double representing the constant that will vary, if the case.
+ */
+double *obtain_varying_constant()
+{
+    switch(cli_args.simulation_type)
+    {
+        case SIMULATION_DENSITY:
+            return &(cli_args.density);
+        case SIMULATION_ALPHA:
+            return &(cli_args.alpha);
+        case SIMULATION_DELTA:
+            return &(cli_args.delta);
+        case SIMULATION_STATIC_COUPLING:
+            return &(cli_args.ks);
+        case SIMULATION_DYNAMIC_COUPLING:
+            return &(cli_args.kd);
+        case SIMULATION_DOOR_LOCATION_ONLY:
+        default:
+            return NULL;
+    }
 }

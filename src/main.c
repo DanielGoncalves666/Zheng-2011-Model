@@ -18,12 +18,13 @@
 #include"../headers/cli_processing.h"
 #include"../headers/printing_utilities.h"
 #include"../headers/shared_resources.h"
-
-#define TOLERANCE 1e-8
+#include"../headers/dynamic_field.h"
 
 static Function_Status run_simulations(FILE *output_file);
 static Function_Status conflict_solving();
 static void deallocate_program_structures(FILE *output_file, FILE *auxiliary_file);
+
+static int number_empty_cells = 0;
 
 int main(int argc, char **argv)
 {
@@ -45,6 +46,7 @@ int main(int argc, char **argv)
             fclose(auxiliary_file);
         return END_PROGRAM;
     }
+    print_full_command(output_file);
 
     if(cli_args.environment_origin != AUTOMATIC_CREATED)
     {
@@ -56,8 +58,7 @@ int main(int argc, char **argv)
         if(generate_environment() == FAILURE)
             return END_PROGRAM;
     }
-
-    print_full_command(output_file);
+    number_empty_cells = count_number_empty_cells();
 
     if(auxiliary_file != NULL)
     {
@@ -99,20 +100,31 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if(allocate_final_floor_field() == FAILURE)
+        if(allocate_exits_set_fields() == FAILURE)
             return END_PROGRAM;
 
-        // exits_set.static_floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
-        // calculate_kirchner_static_field();
+        calculate_kirchner_static_field();
 
-        // print_double_grid(exits_set.static_floor_field);
+        if(cli_args.single_exit_flag == true && exits_set.num_exits == 1 && cli_args.output_format == OUTPUT_TIMESTEPS_COUNT)
+            fprintf(output_file, "#1 "); 
+            // Simulation set where the exit was combined with itself. This is used to correct errors in the plotting program.
 
-        // return END_PROGRAM;
-
-
-        // The actual simulation happens here.
-        if(run_simulations(output_file) == FAILURE)
-            return END_PROGRAM;
+        double *varying_constant = obtain_varying_constant(); // The pointer to the "constant" of the Kirchner model that will vary.
+        if(varying_constant == NULL)
+        {
+            if(run_simulations(output_file) == FAILURE)
+                return END_PROGRAM;
+        }
+        else
+        {
+            for(*varying_constant = cli_args.min; *varying_constant <= cli_args.max; *varying_constant += cli_args.step)
+            {
+                fprintf(output_file, "*%.3f ", *varying_constant);
+                
+                if(run_simulations(output_file) == FAILURE) // The simulations actually happen here.
+                    return END_PROGRAM;
+            }
+        }
 
         if(origin_uses_auxiliary_data() == true)
             deallocate_exits();
@@ -123,7 +135,7 @@ int main(int argc, char **argv)
         if(cli_args.output_format == OUTPUT_HEATMAP)
         {
             print_heatmap(output_file);        
-            initialize_integer_grid(heatmap_grid, cli_args.global_line_number, cli_args.global_column_number,0);
+            fill_integer_grid(heatmap_grid, cli_args.global_line_number, cli_args.global_column_number,0);
         }     
 
         print_execution_status(simulation_set_index, simulation_set_quantity);
@@ -146,17 +158,18 @@ int main(int argc, char **argv)
 */
 static Function_Status run_simulations(FILE *output_file)
 {
-    if(cli_args.single_exit_flag == true && exits_set.num_exits == 1 && cli_args.output_format == OUTPUT_TIMESTEPS_COUNT)
-    {
-        fprintf(output_file, "#1 "); // simulation set where the exit was combined with itself. Used to correct errors in the plotting program.
-    }
-
     for(int simu_index = 0; simu_index < cli_args.num_simulations; simu_index++, cli_args.seed++)
     {
+        fill_integer_grid(exits_set.dynamic_floor_field, cli_args.global_line_number, cli_args.global_column_number, 0);
+        // Restart the dynamic floor field
+
         srand(cli_args.seed);
 
         if(origin_uses_static_pedestrians() == false)
         {
+            if(cli_args.use_density == true)
+                cli_args.total_num_pedestrians = (int) number_empty_cells * cli_args.density;
+
             if( insert_pedestrians_at_random(cli_args.total_num_pedestrians) == FAILURE)
                 return FAILURE;
         }
@@ -172,21 +185,12 @@ static Function_Status run_simulations(FILE *output_file)
                 print_int_grid(pedestrian_position_grid);
                 printf("\nTimestep %d.\n", number_timesteps + 1);
             }
-            
-            if(calculate_all_dynamic_weights() == FAILURE)
-                return FAILURE;
 
-            if(calculate_all_exits_floor_field() == FAILURE)
+            decay();
+            if(diffusion() == FAILURE)
                 return FAILURE;
-
-            if(calculate_final_floor_field() == FAILURE)
-                return FAILURE;
-
-            if(cli_args.show_debug_information)
-                print_double_grid(exits_set.final_floor_field);
 
             evaluate_pedestrians_movements();
-            determine_pedestrians_in_panic();
             
             if(!cli_args.allow_X_movement)
                 block_X_movement(); // Runs when allow_X_movement is false.
@@ -198,7 +202,6 @@ static Function_Status run_simulations(FILE *output_file)
 
             update_pedestrian_position_grid();
             reset_pedestrian_state();
-            reset_pedestrian_panic();
             
             number_timesteps++;
 
@@ -265,6 +268,7 @@ static void deallocate_program_structures(FILE *output_file, FILE *auxiliary_fil
     deallocate_exits();
     
     deallocate_grid((void **) environment_only_grid,cli_args.global_line_number);
+    deallocate_grid((void **) exits_only_grid,cli_args.global_line_number);
     deallocate_grid((void **) pedestrian_position_grid,cli_args.global_line_number);
     deallocate_grid((void **) heatmap_grid,cli_args.global_line_number);
 }

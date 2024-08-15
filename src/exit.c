@@ -1,5 +1,5 @@
 /* 
-   File: saida.c
+   File: exit.c
    Author: Daniel Gonçalves
    Date: 2023-10-15
    Description: This module contains declarations of structures to hold exit information and functions to create/expand exits, add exits to the exits set, and calculate the floor field.
@@ -19,11 +19,8 @@
 Exits_Set exits_set = {NULL, NULL, 0};
 
 static Exit create_new_exit(Location exit_coordinates);
-static Function_Status calculate_exit_floor_field(Exit s);
 static Function_Status calculate_static_weight(Exit current_exit);
-static Function_Status calculate_dynamic_weight(Exit current_exit);
 static void initialize_static_weight_grid(Exit current_exit);
-static void initialize_dynamic_weight_grid(Exit current_exit);
 static bool is_exit_accessible(Exit s);
 static int identify_occupied_cells(Cell **occupied_cells, Exit current_exit);
 
@@ -80,16 +77,17 @@ Function_Status expand_exit(Exit original_exit, Location new_coordinates)
 }
 
 /**
- * Allocates the final_floor_field grid.
+ * Allocates the static_floor_field and dynamic_floor_field grids.
  * 
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
 */
-Function_Status allocate_final_floor_field()
+Function_Status allocate_exits_set_fields()
 {
-    exits_set.final_floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
-    if(exits_set.final_floor_field == NULL)
+    exits_set.static_floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
+    exits_set.dynamic_floor_field = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    if(exits_set.static_floor_field == NULL || exits_set.dynamic_floor_field == NULL)
     {
-        fprintf(stderr,"Failure during the allocation of the final_floor_field.\n");
+        fprintf(stderr,"Failure during the allocation of the static_floor_field and dynamic_floor_field.\n");
         return FAILURE;
     }
 
@@ -106,8 +104,8 @@ Function_Status calculate_kirchner_static_field()
     int num_exit_cells = 0; // The total number of exit cells.
     Location *exit_cell_coordinates = NULL; // A list of all the exit cells coordinates.
 
-    initialize_double_grid(exits_set.static_floor_field, cli_args.global_line_number, cli_args.global_column_number, -1);
-    copy_non_zero_values(exits_set.static_floor_field, environment_only_grid); // Copies the structure of the environment
+    fill_double_grid(exits_set.static_floor_field, cli_args.global_line_number, cli_args.global_column_number, -1);
+    copy_grid_structure(exits_set.static_floor_field, environment_only_grid); // Copies the structure of the environment
 
     // Assign a value of -1 to all exit cells. Cells marked with -1 will have their static floor field values calculated next.
     // Additionally, construct a list containing the coordinates of all exit cells to simplify further processing.
@@ -136,7 +134,7 @@ Function_Status calculate_kirchner_static_field()
     {
         for(int j = 0; j < cli_args.global_column_number; j++)
         {
-            if(exits_set.static_floor_field[i][j] == WALL_VALUE)
+            if(exits_set.static_floor_field[i][j] == WALL_CELL)
                 continue;
 
             for(int cell_index = 0; cell_index < num_exit_cells; cell_index++)
@@ -157,7 +155,7 @@ Function_Status calculate_kirchner_static_field()
     {
         for(int j = 0; j < cli_args.global_column_number; j++)
         {
-            if(exits_set.static_floor_field[i][j] == WALL_VALUE)
+            if(exits_set.static_floor_field[i][j] == WALL_CELL)
                 continue; 
 
             double normalized_distance = maximum_value - exits_set.static_floor_field[i][j];
@@ -192,85 +190,6 @@ Function_Status calculate_all_static_weights()
 }
 
 /**
- * Calculates the dynamic weights of every exit in the exits_set.
- * 
- * @return Function_Status: FAILURE (0) or SUCCESS (1).
-*/
-Function_Status calculate_all_dynamic_weights()
-{
-    if(exits_set.num_exits <= 0 || exits_set.list == NULL)
-    {
-        fprintf(stderr,"The number of exits (%d) is invalid or the exits list is NULL.\n", exits_set.num_exits);
-        return FAILURE;
-    }
-
-    for(int exit_index = 0; exit_index < exits_set.num_exits; exit_index++)
-    {
-        if(calculate_dynamic_weight(exits_set.list[exit_index]) == FAILURE)
-            return FAILURE;
-    }
-
-    return SUCCESS;
-}
-
-/**
- * Calculates the floor field of every exit in the exits_set.
- * 
- * @return Function_Status: FAILURE (0) or SUCCESS (1).
-*/
-Function_Status calculate_all_exits_floor_field()
-{
-    if(exits_set.num_exits <= 0 || exits_set.list == NULL)
-    {
-        fprintf(stderr,"The number of exits (%d) is invalid or the exits list is NULL.\n", exits_set.num_exits);
-        return FAILURE;
-    }
-
-    for(int exit_index = 0; exit_index < exits_set.num_exits; exit_index++)
-    {
-        if(calculate_exit_floor_field(exits_set.list[exit_index]) == FAILURE)
-            return FAILURE;
-    }
-
-    return SUCCESS;
-}
-
-/**
- * Merge the floor_fields of all the exits in the exits_set. The result of this merge is stored at exits_set.final_floor_field.
- * 
- * @return Function_Status: FAILURE (0) or SUCCESS (1)..
-*/
-Function_Status calculate_final_floor_field()
-{
-    if(exits_set.num_exits <= 0 || exits_set.list == NULL || exits_set.final_floor_field == NULL)
-    {
-        fprintf(stderr,"The number of exits (%d) is invalid or the exits_set structure has at least one NULL value.\n", exits_set.num_exits);
-        return FAILURE;
-    }
-
-    if( initialize_double_grid(exits_set.final_floor_field, cli_args.global_line_number, cli_args.global_column_number, 0) == FAILURE)
-        return FAILURE;
-
-    Double_Grid current_exit = exits_set.list[0]->floor_field;
-    copy_double_grid(exits_set.final_floor_field, current_exit); // uses the first exit as the base for the merging
-    
-    for(int exit_index = 1; exit_index < exits_set.num_exits; exit_index++)
-    {
-        current_exit = exits_set.list[exit_index]->floor_field;
-        for(int i = 0; i < cli_args.global_line_number; i++)
-        {
-            for(int h = 0; h < cli_args.global_column_number; h++)
-            {
-                if(exits_set.final_floor_field[i][h] > current_exit[i][h])
-                    exits_set.final_floor_field[i][h] = current_exit[i][h];
-            }
-        }
-    }
-
-    return SUCCESS;
-}
-
-/**
  * Deallocate and reset the structures related to each exit and the exists set.
 */
 void deallocate_exits()
@@ -280,17 +199,17 @@ void deallocate_exits()
         Exit current = exits_set.list[exit_index];
 
         free(current->coordinates);
-        deallocate_grid((void **) current->floor_field, cli_args.global_line_number);
         deallocate_grid((void **) current->static_weight, cli_args.global_line_number);
-        deallocate_grid((void **) current->dynamic_weight, cli_args.global_line_number);
         free(current);
     }
 
     free(exits_set.list);
     exits_set.list = NULL;
 
-    deallocate_grid((void **) exits_set.final_floor_field, cli_args.global_line_number);
-    exits_set.final_floor_field = NULL;
+    deallocate_grid((void **) exits_set.static_floor_field, cli_args.global_line_number);
+    deallocate_grid((void **) exits_set.dynamic_floor_field, cli_args.global_line_number);
+    exits_set.static_floor_field = NULL;
+    exits_set.dynamic_floor_field = NULL;
 
     exits_set.num_exits = 0;
 }
@@ -319,9 +238,7 @@ static Exit create_new_exit(Location exit_coordinates)
             new_exit->coordinates[0] = exit_coordinates;
             new_exit->width = 1;
 
-            new_exit->floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
             new_exit->static_weight = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
-            new_exit->dynamic_weight = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
         }
 
         return new_exit;
@@ -371,7 +288,7 @@ static Function_Status calculate_static_weight(Exit current_exit)
             {
                 double current_cell_value = static_weight[i][h];
 
-                if(current_cell_value == WALL_VALUE || current_cell_value == 0.0) // floor field calculations occur only on cells with values
+                if(current_cell_value == WALL_CELL || current_cell_value == 0.0) // floor field calculations occur only on cells with values
                     continue;
 
                 for(int j = -1; j < 2; j++)
@@ -384,7 +301,7 @@ static Function_Status calculate_static_weight(Exit current_exit)
                         if(! is_within_grid_columns(h + k))
                             continue;
 
-                        if(static_weight[i + j][h + k] == WALL_VALUE || static_weight[i + j][h + k] == EXIT_VALUE)
+                        if(static_weight[i + j][h + k] == WALL_CELL || static_weight[i + j][h + k] == EXIT_CELL)
                             continue;
 
                         if(j != 0 && k != 0)
@@ -419,86 +336,6 @@ static Function_Status calculate_static_weight(Exit current_exit)
 }
 
 /**
- * Calculates the dynamic weights for the given exit.
- * 
- * @note To ensure that the final_floor_field matches the examples provided in the Alizadeh article, the division by 2 on the num_cells_equal_value needs to be removed.
- * 
- * @param current_exit Exit for which the dynamic weights will be calculated.
- * 
- * @return Function_Status: FAILURE (0) or SUCCESS (1).
-*/
-static Function_Status calculate_dynamic_weight(Exit current_exit)
-{
-    Cell *occupied_cells = NULL;
-
-    int num_occupied_cells = identify_occupied_cells(&occupied_cells, current_exit);
-    if(num_occupied_cells == -1)
-        return FAILURE;
-    
-    quick_sort(occupied_cells, 0, num_occupied_cells - 1);
-    
-    initialize_dynamic_weight_grid(current_exit);
-    Double_Grid dynamic_weight = current_exit->dynamic_weight;
-
-    for(int i = 0; i < cli_args.global_line_number; i++)
-    {
-        for(int h = 0; h < cli_args.global_column_number; h++)
-        {
-            if(dynamic_weight[i][h] == -1)
-                continue;
-
-            double static_weight = current_exit->static_weight[i][h];
-
-            int num_cells_equal_value = 0;
-            int num_cells_smaller_value = count_cells_with_smaller_value(occupied_cells, num_occupied_cells, 
-                                                                         static_weight, &num_cells_equal_value);
-
-            if(num_cells_smaller_value == -1)
-                num_cells_smaller_value = 0; // Not a single cell smaller than the current static_weight.
-            
-
-
-            dynamic_weight[i][h] = (num_cells_smaller_value + num_cells_equal_value) / (double) current_exit->width;
-        }
-    }
-
-    free(occupied_cells);
-
-    return SUCCESS;
-}
-
-/**
- * Combines the static and dynamic weights into the floor field for the given exit.
- * 
- * @note Before calling this function, it is imperative that the static weights of the given exit have already been calculated.
- * 
- * @param current_exit Exit for which the floor field will be calculated.
- * @return Function_Status: FAILURE (0) or SUCCESS (1).
-*/
-static Function_Status calculate_exit_floor_field(Exit current_exit)
-{
-    if(current_exit == NULL)
-    {
-        fprintf(stderr, "A Null pointer was received in 'calculate_exit_floor_field' instead of a valid Exit.\n");
-        return FAILURE;
-    }
-
-    for(int i = 0; i < cli_args.global_line_number; i++)
-    {
-        for(int h = 0; h < cli_args.global_column_number; h++)
-        {
-            if(current_exit->dynamic_weight[i][h] == -1) // Cells with no dynamic weight (obstacles and walls).
-                current_exit->floor_field[i][h] = current_exit->static_weight[i][h];
-            else
-                current_exit->floor_field[i][h] = current_exit->static_weight[i][h] + 
-                                                  cli_args.alpha * current_exit->dynamic_weight[i][h];
-        }
-    }
-
-    return SUCCESS;
-}
-
-/**
  * Copies the structure (obstacles and walls) from the environment_only_grid to the static weight grid 
  * for the provided exit. Additionally, adds the exit cells to it.
  * 
@@ -514,8 +351,8 @@ static void initialize_static_weight_grid(Exit current_exit)
         for(int h = 0; h < cli_args.global_column_number; h++)
         {
             double cell_value = environment_only_grid[i][h];
-            if(cell_value == WALL_VALUE)
-                current_exit->static_weight[i][h] = WALL_VALUE;
+            if(cell_value == WALL_CELL)
+                current_exit->static_weight[i][h] = WALL_CELL;
             else
                 current_exit->static_weight[i][h] = 0.0;
         }
@@ -526,27 +363,7 @@ static void initialize_static_weight_grid(Exit current_exit)
     {
         Location exit_cell = current_exit->coordinates[i];
 
-        current_exit->static_weight[exit_cell.lin][exit_cell.col] = EXIT_VALUE;
-    }
-}
-
-/**
- * Adds an indicator (-1) to the dynamic weight grid to ensure that the positions occupied by obstacles or walls do not have the dynamic weight calculated.
- * 
- * @param current_exit The exit for which the dynamic weights will be initialized.
-*/
-static void initialize_dynamic_weight_grid(Exit current_exit)
-{
-    for(int i = 0; i < cli_args.global_line_number; i++)
-    {
-        for(int h = 0; h < cli_args.global_column_number; h++)
-        {
-            double cell_value = environment_only_grid[i][h];
-            if(cell_value == WALL_VALUE)
-                current_exit->dynamic_weight[i][h] = -1;
-            else
-                current_exit->dynamic_weight[i][h] = 0.0;
-        }
+        current_exit->static_weight[exit_cell.lin][exit_cell.col] = EXIT_CELL;
     }
 }
 
@@ -577,7 +394,8 @@ static bool is_exit_accessible(Exit current_exit)
                 if(! is_within_grid_columns(c.col + k))
                     continue;
 
-                if(current_exit->floor_field[c.lin + j][c.col + k] == WALL_VALUE || current_exit->floor_field[c.lin + j][c.col + k] == EXIT_VALUE)
+                // De floor_field para static_weight AQUI
+                if(current_exit->static_weight[c.lin + j][c.col + k] == WALL_CELL || current_exit->static_weight[c.lin + j][c.col + k] == EXIT_CELL)
                     continue;
 
                 if(j != 0 && k != 0)

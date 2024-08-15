@@ -21,6 +21,7 @@ typedef struct{
     bool prevent_corner_crossing;
     bool allow_X_movement;
     bool single_exit_flag;
+    bool use_density; // Indicates if the number os pedestrians to be inserted (if the case) is to be based on the density or in the total_num_pedestrians.
     int global_line_number;
     int global_column_number;
     int num_simulations;
@@ -39,6 +40,7 @@ typedef struct{
 
 error_t parser_function(int key, char *arg, struct argp_state *state);
 void extract_full_command(char *full_command, int key, char *arg);
+double *obtain_varying_constant();
 
 extern Command_Line_Args cli_args; // cli stands for command line interface
 extern const char * argp_program_version;

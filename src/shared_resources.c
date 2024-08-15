@@ -29,7 +29,7 @@ bool origin_uses_auxiliary_data()
 /**
  * Verifies if the environment_origin selected uses pedestrians loaded directly from the env-file instead of randomly inserting them.
  * 
- * @return bool, where True indicates that the origin uses static pedestrians is used and False otherwise.
+ * @return bool, where True indicates that the origin uses static pedestrians and False otherwise.
 */
 bool origin_uses_static_pedestrians()
 {
@@ -38,9 +38,9 @@ bool origin_uses_static_pedestrians()
 }
 
 /**
- * Verifies if the environment_origin selected uses exits loaded directly from the env-file instead of inserted them with data from an auxiliary file.
+ * Verifies if the selected environment_origin uses exits loaded directly from the env-file instead of inserting them with data from an auxiliary file.
  * 
- * @return bool, where True indicates that the origin uses static exits is used and False otherwise.
+ * @return bool, where True indicates that the origin uses static exits and False otherwise.
 */
 bool origin_uses_static_exits()
 {
@@ -58,4 +58,33 @@ bool origin_uses_static_exits()
 double euclidean_distance(Location first, Location second)
 {
     return sqrt(pow(first.lin - second.lin, 2) + pow(first.col - second.col, 2));
+}
+
+/**
+ * Generates a random floating-point number within a specified range [min, max].
+ * 
+ * @param min The lower bound of the range (inclusive).
+ * @param max The upper bound of the range (inclusive).
+ * 
+ * @return A random floating-point number between `min` and `max`, inclusive.
+ */
+float rand_within_limits(float min, float max) 
+{
+    float range = (max - min); 
+    double div = RAND_MAX / range;
+    return min + (rand() / div);
+}
+
+/**
+ * Determines whether a event occurs based on a probability.
+ * 
+ * @param probability The probability that an event will occur. Must be a value between 0 and 1 (inclusive).
+ * 
+ * @return True, if the draw number is less than the given probability (i.e., the event happens), or False, if otherwise.
+ */
+bool probability_test(double probability)
+{
+    float draw_number = rand_within_limits(0,1);
+
+    return draw_number < probability;
 }
