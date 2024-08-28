@@ -39,6 +39,8 @@ typedef struct{
     int col;
 }Location;
 
+#define TOLERANCE 1E-10
+
 #define WALL_CELL -1000
 #define EXIT_CELL -1001
 #define EMPTY_CELL -1002
@@ -46,8 +48,10 @@ typedef struct{
 bool origin_uses_auxiliary_data();
 bool origin_uses_static_pedestrians();
 bool origin_uses_static_exits();
+bool are_same_coordinates(Location first, Location second);
 double euclidean_distance(Location first, Location second);
 float rand_within_limits(float min, float max);
 bool probability_test(double probability);
+int roulette_wheel_selection(double *probability_list, int length, double total_probability);
 
 #endif

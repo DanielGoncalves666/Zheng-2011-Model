@@ -33,7 +33,7 @@ Pedestrian_Set pedestrian_set = {NULL,0};
 
 static Pedestrian create_pedestrian(Location ped_coordinates);
 void calculate_transition_probabilities(Pedestrian current_pedestrian);
-Location roulette_wheel_selection(Pedestrian current_pedestrian);
+Location transition_selection(Pedestrian current_pedestrian);
 static bool are_pedestrian_paths_crossing(Pedestrian first_pedestrian, Pedestrian second_pedestrian);
 static Function_Status calculate_reduced_line_equation(Location origin, Location target, reduced_line_equation* line);
 static void calculate_intersection_point(reduced_line_equation first_line, reduced_line_equation second_line, double *x, double *y);
@@ -61,17 +61,20 @@ Function_Status insert_pedestrians_at_random(int num_pedestrians_to_insert)
 
     for(int p_index = 0; p_index < num_pedestrians_to_insert; p_index++)
     {
-        int line = rand() % (cli_args.global_line_number - 1) + 1;
-        int column = rand() % (cli_args.global_column_number - 1) + 1;
+
+        int line = (int) rand_within_limits(1, cli_args.global_line_number - 1);
+        int column = (int) rand_within_limits(1, cli_args.global_column_number - 1);
+        // If any of the drawn number equals the final number of the interval, the coordinates will correspond to a cell occupied by a wall or door. These cases are handled by the is_cell_empty function call bellow.
 
         // If the cell at the draw coordinates is empty, the pedestrian is immediately inserted there. But, if its not, the pedestrian will be place in the next available empty cell.
         // If no empty cell is found when the scan reaches the bottom right of the environment, the search will restart at the top left.
-        
+
+        bool next_pedestrian = false; // Indicates if the pedestrian has already been inserted and that the for loops bellow should end.  
         bool already_looping = false; // Indicates if the search for an empty cell has already looped around.
         for(; line < cli_args.global_line_number - 1; line++)
         {
             for(; column < cli_args.global_column_number - 1; column++)
-            {
+            {       
                 if(is_cell_empty((Location) {line, column}) == true)
                 {
                     if( add_new_pedestrian((Location) {line, column}) == FAILURE)
@@ -79,9 +82,14 @@ Function_Status insert_pedestrians_at_random(int num_pedestrians_to_insert)
 
                     pedestrian_position_grid[line][column] = pedestrian_set.list[pedestrian_set.num_pedestrians - 1]->id;
 
-                    return SUCCESS;
+                    next_pedestrian = true;
+                    break;
                 }
             }
+
+            if(next_pedestrian)
+                break;
+
             column = 1;
 
             if(line + 1 == cli_args.global_line_number - 1)
@@ -160,7 +168,7 @@ void evaluate_pedestrians_movements()
             continue;
 
         calculate_transition_probabilities(current_pedestrian);
-        Location destination_cell = roulette_wheel_selection(current_pedestrian);
+        Location destination_cell = transition_selection(current_pedestrian);
 
         current_pedestrian->target = destination_cell;
     }
@@ -255,6 +263,9 @@ Function_Status identify_pedestrian_conflicts(Cell_Conflict *pedestrian_conflict
 */
 Function_Status solve_pedestrian_conflicts(Cell_Conflict pedestrian_conflicts, int num_conflicts)
 {
+    static double probabilities[] = {1, 1, 1, 1, 1, 1, 1, 1};
+    // The maximum number of conflicts (when considering diagonal movements) is 8.
+
     if(pedestrian_conflicts == NULL && num_conflicts > 0)
     {
         fprintf(stderr, "Null pointer received at solve_pedestrian_conflicts when a valid pointer was expected.\n");
@@ -264,7 +275,9 @@ Function_Status solve_pedestrian_conflicts(Cell_Conflict pedestrian_conflicts, i
     for(int conflict_index = 0; conflict_index < num_conflicts; conflict_index++)
     {
         Cell_Conflict current_conflict = &(pedestrian_conflicts[conflict_index]);
-        int random_result = rand() % current_conflict->num_pedestrians;
+
+        int random_result = roulette_wheel_selection((double *) &probabilities, current_conflict->num_pedestrians,   
+                                                    current_conflict->num_pedestrians);
 
         current_conflict->pedestrian_allowed = current_conflict->pedestrian_ids[random_result];
         for(int p_index = 0; p_index < current_conflict->num_pedestrians; p_index++)
@@ -372,7 +385,15 @@ void apply_pedestrian_movement()
 
         if(current_pedestrian->state == MOVING)
         {
-            increase_particle_at(current_pedestrian->current);
+            if(! are_same_coordinates(current_pedestrian->current, current_pedestrian->target))
+            {
+                // In case the pedestrian didn't move, the previous cell is preserved (since it isn't updated).
+                // This guarantees the pedestrian will not get confused with its own trace.
+
+                current_pedestrian->previous = current_pedestrian->current;
+                increase_particle_at(current_pedestrian->current);
+            }
+
             current_pedestrian->current = current_pedestrian->target;
 
             if(exits_only_grid[current_pedestrian->current.lin][current_pedestrian->current.col] == EXIT_CELL)
@@ -447,8 +468,8 @@ void reset_pedestrians_structures()
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
 
-        current_pedestrian->current.lin = current_pedestrian->origin.lin;
-        current_pedestrian->current.col = current_pedestrian->origin.col;
+        current_pedestrian->previous = current_pedestrian->origin;
+        current_pedestrian->current = current_pedestrian->origin;
         current_pedestrian->state = MOVING;
         pedestrian_position_grid[current_pedestrian->current.lin][current_pedestrian->current.col] = current_pedestrian->id;
     }
@@ -471,7 +492,7 @@ static Pedestrian create_pedestrian(Location ped_coordinates)
     Pedestrian new_pedestrian = calloc(1, sizeof(struct pedestrian));
     if(new_pedestrian != NULL)
     {
-        new_pedestrian->current = new_pedestrian->origin = ped_coordinates;
+        new_pedestrian->current = new_pedestrian->previous = new_pedestrian->origin = ped_coordinates;
         new_pedestrian->target = (Location) {-1, -1};
         new_pedestrian->state = MOVING;
         // probabilities are already all set to 0.
@@ -507,15 +528,30 @@ void calculate_transition_probabilities(Pedestrian current_pedestrian)
                     continue;
                 }
 
+                int dynamic_floor_field_value = exits_set.dynamic_floor_field[lin + i - 1][col + j - 1];
+                if(! are_same_coordinates(current_pedestrian->origin, current_pedestrian->previous))
+                {
+                    // Guarantees that the pedestrian has already moved from its original position.
+
+                    if(are_same_coordinates(current_pedestrian->previous, (Location) {lin + (i - 1), col + (j - 1)}))
+                    {
+                        // The cell of the neighborhood which the transition probability is being calculated is the cell that the pedestrian was previously located.
+
+                        if(dynamic_floor_field_value > 0)
+                            dynamic_floor_field_value--;
+                    }
+                }
+
+
                 // Static floor field
                 current_pedestrian->probabilities[i][j] = exp(cli_args.ks * exits_set.static_floor_field[lin + i - 1][col + j - 1]);
                 // Dynamic floor field
-                current_pedestrian->probabilities[i][j] *= exp(cli_args.kd * exits_set.dynamic_floor_field[lin + i - 1][col + j - 1]); 
+                current_pedestrian->probabilities[i][j] *= exp(cli_args.kd * dynamic_floor_field_value); 
 
                 if(! (i == 1 && j == 1)) // Ignores when is the pedestrian's cell.
                     current_pedestrian->probabilities[i][j] *= 1 - (pedestrian_position_grid[lin + i - 1][col + j - 1] > 0 ? 1 : 0); // Multiply by 0 if cell is occupied
                 
-                current_pedestrian->probabilities[i][j] *= exits_set.static_floor_field[lin + i - 1][col + j - 1] == EXIT_CELL ? 0 : 1; // Multiply by 0 if cell has an obstacle.
+                current_pedestrian->probabilities[i][j] *= exits_set.static_floor_field[lin + i - 1][col + j - 1] == WALL_CELL ? 0 : 1; // Multiply by 0 if cell has an obstacle.
             
                 normalization_value += current_pedestrian->probabilities[i][j];
             }
@@ -543,14 +579,11 @@ void calculate_transition_probabilities(Pedestrian current_pedestrian)
  * 
  * @return The coordinates of the selected destination cell.
  */
-Location roulette_wheel_selection(Pedestrian current_pedestrian)
+Location transition_selection(Pedestrian current_pedestrian)
 {
     float draw_value = 0;
-
-    do{
-        draw_value = rand_within_limits(0,1);
-    }while(draw_value == 1); // Ensures that the draw values isn't 1, since the value wouldn't correspond to any cell with a positive probability (because the check uses less than, instead of less or equal than).
-
+    draw_value = rand_within_limits(0,1);
+    
     Location current_coordinates = current_pedestrian->current;
 
     double total = 0;
@@ -563,12 +596,12 @@ Location roulette_wheel_selection(Pedestrian current_pedestrian)
 
             total += current_pedestrian->probabilities[i][j];
 
-            if(draw_value < total)
+            if(draw_value <= total + TOLERANCE)
                 return (Location) {current_coordinates.lin + (i - 1), current_coordinates.col + (j - 1)};
         }
     }
 
-    return current_coordinates; // In case no cell was chosen due to rounding errors.
+    return current_coordinates; // If no cell is selected due to rounding errors, the probability corresponding to the pedestrian's current cell will be chosen.
 }
 
 
@@ -694,14 +727,14 @@ static bool is_intersection_within_pedestrian_movement(double x_coordinate, doub
 */
 static void solve_X_movement(Pedestrian first_pedestrian, Pedestrian second_pedestrian)
 {
-    int sorted_num = rand() % 100;
-
-    if(sorted_num < 50)
+    double sorted_value = rand_within_limits(0,1);
+    
+    if(sorted_value <= 0.5 + TOLERANCE)
         second_pedestrian->state = STOPPED;
     else
         first_pedestrian->state = STOPPED;
 
     if(cli_args.show_debug_information)
         printf("X Movement between %d and %d --> %d.\n", first_pedestrian->id, second_pedestrian->id, 
-                                                         sorted_num < 50 ? first_pedestrian->id : second_pedestrian->id);
+                                                         sorted_value < 0.5 + TOLERANCE? first_pedestrian->id : second_pedestrian->id);
 }

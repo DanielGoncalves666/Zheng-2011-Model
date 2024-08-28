@@ -49,6 +49,19 @@ bool origin_uses_static_exits()
 }
 
 /**
+ * Verifies if the given Locations contain the same coordinates
+ * 
+ * @param first A Location.
+ * @param second A Location.
+ * 
+ * @return True, if the coordinates are the name, or False, if otherwise.
+ */
+bool are_same_coordinates(Location first, Location second)
+{
+    return first.lin == second.lin && first.col == second.col;
+}
+
+/**
  * Calculates the Euclidean distance between the provided coordinates.
  * @param first The first pair of coordinates.
  * @param second The second pair of coordinates.
@@ -87,4 +100,37 @@ bool probability_test(double probability)
     float draw_number = rand_within_limits(0,1);
 
     return draw_number < probability;
+}
+
+/**
+ * Simulates a roulette wheel selection to determine which of the provided probabilities (each corresponding to a specific event) will be chosen. 
+ * 
+ * @param probability_list A list of probabilities, from which one will be chosen.
+ * @param length The number of elements in the probability_list
+ * @param total_probability The sum of all the probabilities in the probability_list.
+ * 
+ * @return The index of the "chosen probability".
+ */
+int roulette_wheel_selection(double *probability_list, int length, double total_probability)
+{
+    float draw_value = 0;
+    int index = -1; // The index of the chosen "probability".
+
+    draw_value = rand_within_limits(0,total_probability);
+
+    double current_sum = 0; // Sum of probabilities from index 0 to i.
+    for(int i = 0; i < length; i++)
+    { 
+        if(probability_list[i] == 0)
+            continue;
+
+        index = i; // Stores the last valid index. Used to return the last valid probability in case of rounding errors.
+
+        current_sum += probability_list[i];
+
+        if(draw_value <= current_sum + TOLERANCE)
+            return index;
+    }
+
+    return index; // Will reach in case of rounding errors.
 }

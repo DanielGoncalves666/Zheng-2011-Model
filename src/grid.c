@@ -237,7 +237,7 @@ Function_Status copy_grid_structure(Double_Grid destination, Int_Grid source)
  * Iterates through each cell in the source grid and adds its value to the corresponding
  * cell in the destination grid. The result is stored in place within the destination grid.
  * 
- * @param destinationThe The grid that will be updated with the summed values.
+ * @param destination The grid that will be updated with the summed values.
  * @param second he grid that provides the values to be added to the destination grid.
  * 
  * @return Function_Status: FAILURE (0) or SUCCESS (1).

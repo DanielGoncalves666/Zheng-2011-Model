@@ -5,6 +5,7 @@
 
 void increase_particle_at(Location coordinates);
 void decay();
-Function_Status diffusion();
+Function_Status single_diffusion(bool is_moving);
+Function_Status multiple_diffusion();
 
 #endif

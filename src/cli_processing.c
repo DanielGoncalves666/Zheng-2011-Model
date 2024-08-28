@@ -8,6 +8,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<time.h>
 #include<argp.h>
 #include<unistd.h>
 #include<stdbool.h>
@@ -75,7 +76,7 @@ struct argp_option options[] = {
 
     {"\nSimulation Variables (optional):\n",0,0,OPTION_DOC,0,7},
     {"simu", 's', "SIMULATIONS", 0, "Number of simulations for each simulation set (default is 1).",8},
-    {"seed", OPT_SEED, "SEED", 0, "Initial seed for the srand function (default is 0)."},
+    {"seed", OPT_SEED, "SEED", 0, "Initial seed for the srand function (default is 0). If a negative number is given, the starting seed will be set to the value returned by time()."},
     {"diagonal", OPT_DIAGONAL, "DIAGONAL", 0, "The diagonal value for calculation of the static floor field (default is 1.5)."},
 
     {"\nVariables and toggle options related to pedestrians (all optional):\n",0,0,OPTION_DOC,0,9},
@@ -246,10 +247,8 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
         case OPT_SEED:
             cli_args->seed = atoi(arg);
             if(cli_args->seed < 0)
-            {
-                fprintf(stderr, "The Seed value must be non-negative.\n");
-                return EIO;
-            }
+                cli_args->seed = time(NULL);
+                
             break;
         case OPT_DEBUG:
             cli_args->show_debug_information = true;

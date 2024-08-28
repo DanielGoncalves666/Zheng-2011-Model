@@ -11,6 +11,7 @@ struct pedestrian {
     int id;
     enum Pedestrian_State state;
     Location origin; // Original pedestrian localization. Remains unchanged until the structure instance is deallocated.
+    Location previous;
     Location current; 
     Location target;
     double probabilities[3][3];

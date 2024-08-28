@@ -117,12 +117,15 @@ int main(int argc, char **argv)
         }
         else
         {
-            for(*varying_constant = cli_args.min; *varying_constant <= cli_args.max; *varying_constant += cli_args.step)
+            for(*varying_constant = cli_args.min; *varying_constant <= cli_args.max + TOLERANCE; *varying_constant += cli_args.step)
             {
                 fprintf(output_file, "*%.3f ", *varying_constant);
-                
+
                 if(run_simulations(output_file) == FAILURE) // The simulations actually happen here.
                     return END_PROGRAM;
+
+                if(cli_args.output_format == OUTPUT_TIMESTEPS_COUNT)
+                    fprintf(output_file, "\n");
             }
         }
 
@@ -182,12 +185,16 @@ static Function_Status run_simulations(FILE *output_file)
         {
             if(cli_args.show_debug_information)
             {
-                print_int_grid(pedestrian_position_grid);
                 printf("\nTimestep %d.\n", number_timesteps + 1);
+                print_int_grid(pedestrian_position_grid);
             }
 
+            if(cli_args.show_debug_information)
+                print_int_grid(exits_set.dynamic_floor_field);
+
             decay();
-            if(diffusion() == FAILURE)
+            // When the particle moves instead of the creation of particles, it generates results closer to the article.
+            if(single_diffusion(true) == FAILURE)
                 return FAILURE;
 
             evaluate_pedestrians_movements();
@@ -222,6 +229,8 @@ static Function_Status run_simulations(FILE *output_file)
 
         if(cli_args.output_format == OUTPUT_TIMESTEPS_COUNT)
             fprintf(output_file,"%d ", number_timesteps);
+
+        fflush(output_file);
     }
 
     return SUCCESS;
