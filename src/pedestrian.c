@@ -379,6 +379,9 @@ void apply_pedestrian_movement()
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
+
+        if(current_pedestrian->state != GOT_OUT && !cli_args.velocity_density_field)
+            increase_particle_at(current_pedestrian->current); // When the dynamic field is defined as a particle density field, increases the particle count for all cells occupied by pedestrians (not only for those which the pedestrian is moving away).
         
         if(current_pedestrian->state == GOT_OUT || current_pedestrian->state == STOPPED)
             continue; // Pedestrian is ignored
@@ -391,7 +394,10 @@ void apply_pedestrian_movement()
                 // This guarantees the pedestrian will not get confused with its own trace.
 
                 current_pedestrian->previous = current_pedestrian->current;
-                increase_particle_at(current_pedestrian->current);
+
+                // When the dynamic field has been defined as a particle density field, the increase in the cell particles happens only in the beginning of each timestep, considering the current location of each pedestrian and not when (if) they move.
+                if(cli_args.velocity_density_field)
+                    increase_particle_at(current_pedestrian->current);
             }
 
             current_pedestrian->current = current_pedestrian->target;
@@ -404,7 +410,9 @@ void apply_pedestrian_movement()
         }
         else if(current_pedestrian->state == LEAVING)
         {
-            increase_particle_at(current_pedestrian->current);
+            if(cli_args.velocity_density_field)
+                increase_particle_at(current_pedestrian->current);
+
             current_pedestrian->state = GOT_OUT; // After a timestep in the exit the pedestrian is removed from the environment.
         }
     }
@@ -529,19 +537,22 @@ void calculate_transition_probabilities(Pedestrian current_pedestrian)
                 }
 
                 int dynamic_floor_field_value = exits_set.dynamic_floor_field[lin + i - 1][col + j - 1];
-                if(! are_same_coordinates(current_pedestrian->origin, current_pedestrian->previous))
+
+                if(cli_args.ignore_latest_self_trace)
                 {
-                    // Guarantees that the pedestrian has already moved from its original position.
-
-                    if(are_same_coordinates(current_pedestrian->previous, (Location) {lin + (i - 1), col + (j - 1)}))
+                    if(! are_same_coordinates(current_pedestrian->origin, current_pedestrian->previous))
                     {
-                        // The cell of the neighborhood which the transition probability is being calculated is the cell that the pedestrian was previously located.
+                        // Guarantees that the pedestrian has already moved from its original position.
 
-                        if(dynamic_floor_field_value > 0)
-                            dynamic_floor_field_value--;
+                        if(are_same_coordinates(current_pedestrian->previous, (Location) {lin + (i - 1), col + (j - 1)}))
+                        {
+                            // The cell of the neighborhood which the transition probability is being calculated is the cell that the pedestrian was previously located.
+
+                            if(dynamic_floor_field_value > 0)
+                                dynamic_floor_field_value--;
+                        }
                     }
                 }
-
 
                 // Static floor field
                 current_pedestrian->probabilities[i][j] = exp(cli_args.ks * exits_set.static_floor_field[lin + i - 1][col + j - 1]);

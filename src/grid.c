@@ -17,6 +17,7 @@ Int_Grid environment_only_grid = NULL; // Grid containing only the structure and
 Int_Grid exits_only_grid = NULL; // Grid containing only the exits.
 Int_Grid pedestrian_position_grid = NULL; // Grid containing pedestrians at their respective positions.
 Int_Grid heatmap_grid = NULL; // Grid containing the count of pedestrian visits per cell.
+Int_Grid aux_dynamic_grid = NULL; // Grid used to help in the diffusion process.
 
 /**
  * Dynamically allocates an integer matrix of dimensions determined by the function parameters.

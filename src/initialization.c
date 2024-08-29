@@ -113,7 +113,9 @@ Function_Status allocate_grids()
     exits_only_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     pedestrian_position_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     heatmap_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
-    if(environment_only_grid == NULL || exits_only_grid == NULL || pedestrian_position_grid == NULL || heatmap_grid == NULL)
+    aux_dynamic_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    if(environment_only_grid == NULL || exits_only_grid == NULL || pedestrian_position_grid == NULL 
+                                     || heatmap_grid == NULL    || aux_dynamic_grid == NULL)
     {
         fprintf(stderr,"Failure during allocation of the integer grids with dimensions: %d x %d.\n", cli_args.global_line_number, cli_args.global_column_number);
         return FAILURE;
@@ -147,7 +149,7 @@ Function_Status load_environment()
         return FAILURE;
 
     char read_char = '\0';
-    fscanf(environment_file,"%c",&read_char);// responsible for eliminating the '\n' after the environment dimensions.
+    int returned_value = fscanf(environment_file,"%c",&read_char);// responsible for eliminating the '\n' after the environment dimensions.
     for(int i = 0; i < cli_args.global_line_number; i++)
     {
         int h = 0;

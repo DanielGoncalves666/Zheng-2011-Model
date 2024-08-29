@@ -1,10 +1,6 @@
-# Implementation of the Alizadeh model for Pedestrian Evacuation
+# Implementation of the Kirchner model for Pedestrian Evacuation
 
-This repository contains an implementation of the Alizadeh model for pedestrian evacuation using cellular automata. It is based on the implementation of the Varas model for pedestrian evacuation, available [here](https://github.com/DanielGoncalves666/Varas-Model.git).
-
-As described in the Varas model documentation, there is a notable difference between the models by both authors and this implementation: pedestrians aren't allowed to perform X movements. In the pedestrian evacuation process, X movements occur when two pedestrians try to move in a way that would cause them to collide in real life situations. To enhance realism, only one of the pedestrians is randomly allowed to move on these situations.
-
-The described addition can be deactivated using the `--allow-x-movement` flag.
+This repository contains an implementation of the Kirchner model for pedestrian evacuation using cellular automata.
 
 ## Terminology
 
@@ -21,7 +17,7 @@ The term **simulation set** refers to a group of simulations with the same param
 To compile and run the program, execute the following command in your shell, replacing `[arguments]` with the desired command-line arguments:
 
 ```bash
-./alizadeh.sh [arguments]
+./kirchner.sh [arguments]
 ```
 
 ## Input and Output Files
@@ -109,7 +105,8 @@ Simulation Variables (optional):
       --diagonal=DIAGONAL    The diagonal value for calculation of the static
                              floor field (default is 1.5).
       --seed=SEED            Initial seed for the srand function (default is
-                             0).
+                             0). If a negative number is given, the starting
+                             seed will be set to the value returned by time().
   -s, --simu=SIMULATIONS     Number of simulations for each simulation set
                              (default is 1).
   
@@ -123,16 +120,11 @@ Variables and toggle options related to pedestrians (all optional):
       --immediate-exit       The pedestrians will exit the environment the
                              moment they reach an exit, instead of waiting a
                              timestep in the LEAVING state.
-  -p, --ped=PEDESTRIANS      Number of pedestrians to be randomly placed in the
-                             environment (default is 1).
-      --density=DENSITY      The percentage of unoccupied cells in the
-                             environment that should be filled by pedestrians.
-                             If provided, it takes precedence over the --ped
-                             option.  If not provided, the --ped option is used
-                             by default, even if it wasn't explicitly
-                             specified.
+  -p, --ped=PEDESTRIANS      Manually set the number of pedestrians to be
+                             randomly placed in the environment. If provided
+                             takes precedence over --density.
   
-Kirchner model constants:
+Kirchner model constants and options:
 
       --alpha=ALPHA          The probability that a particle in the dynamic
                              floor field will undergo diffusion. Value must be
@@ -140,6 +132,15 @@ Kirchner model constants:
       --delta=DELTA          The probability that a particle in the dynamic
                              floor field will decay. Value must be between 0
                              and 1, both inclusive. Defaults to 0.5.
+      --density=DENSITY      The percentage of unoccupied cells in the
+                             environment that should be filled by pedestrians.
+                             Defaults to 0.3.
+      --dyn-definition=DYN   Determines how the dynamic floor field is defined,
+                             either as a virtual velocity density field or a
+                             particle density field.
+      --ignore-self-trace    When calculating transition probabilities for a
+                             pedestrian, ignores the most recent particle
+                             deposited by that pedestrian.
       --kd=KD                The dynamic field coupling constant that
                              determines the strength of the dynamic floor field
                              when calculating the transition probabilities for
@@ -186,21 +187,32 @@ The --env-load-method option specifies whether the environment will be created
 or loaded from the file provided by --env-file, as well as how it will be
 loaded if applicable. The following choices are available:
         Environment loaded from a file:
-                1 - Only the environment structure (walls and obstacles).
-                2 - Environment structure and static exits.
-                3 - Environment structure and static pedestrians.
+                1 -           Only the environment structure (walls and obstacles).
+                2 -           Environment structure and static exits.
+                3 -           Environment structure and static pedestrians.
                 4 - (default) Environment structure, static exits and static pedestrians.
         Environment auto created:
-                5 - Environment structure will be a empty room with dimensions of LINES and
-COLUMNS (including the walls surrounding it).
+                5 -           Environment structure will be a empty room with dimensions of
+LINES and COLUMNS (including the walls surrounding it).
+
 Choices 1, 3 and 5 require the file provided by the --auxiliary-file option in
 order to include exits in the simulation.
 
 The --output-format option specifies which data generated by the simulations
 shall be written to the output stream. The following choices are available:
          1 - (default) Visual print of the environment.
-         2 - Number of timesteps required for the termination of each simulation.
-         3 - Heatmap of the environment cells.
+         2 -           Number of timesteps required for the termination of each
+simulation.
+         3 -           Heatmap of the environment cells.
+
+The --dyn-definition option specifies how the dynamic floor field is defined,
+either as a particle density field or a velocity density field. In the particle
+density field, pedestrians leave particles in the cell they occupy (before any
+movement is attempted). In the velocity density field, they leave a particle
+only in their previous location when they move. The following choices are
+available:
+         1 - (default) Velocity Density Field.
+         2 -           Particle Density Field.
 
 If all Kirchner constants are provided (with the --ped option counting as
 --density), the program will perform simulations varying only the simulation
@@ -211,5 +223,5 @@ simulations varying the missing constant. In this case, the --min, --max, and
 Finally, if three or fewer constants are provided, the program will use default
 values for the remaining constants.
 
-Unnecessary options for some --env-load-method are ignored.
+Unnecessary options for some --env-load-method are ignored
 ```

@@ -68,10 +68,9 @@ Function_Status single_diffusion(bool is_moving)
     static Location modifiers[] = {{-1,0}, {0,-1}, {0,1}, {1,0}}; // Diffusion doesn't occur in the diagonals.
     static double probabilities[] = {1, 1, 1, 1};
 
-    Int_Grid aux = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
-    
-    if(aux == NULL)
+    if( fill_integer_grid(aux_dynamic_grid, cli_args.global_line_number, cli_args.global_column_number, 0) == FAILURE)
         return FAILURE;
+    // Reset to 0 all positions of the auxiliary grid.
 
     for(int i = 0; i < cli_args.global_line_number; i++)
     {
@@ -112,10 +111,9 @@ Function_Status single_diffusion(bool is_moving)
                     if(chosen_index == -1)
                     {
                         if(is_moving)
-                            aux[i][j] -= 1; // Diffusion that moves the particles.
+                            aux_dynamic_grid[i][j] -= 1; // Diffusion that moves the particles.
 
-                        aux[i + modifiers[m].lin][j + modifiers[m].col] += 1;
-                        fprintf(stdout, "%d %d--> %d %d", i,j, i + modifiers[m].lin, j + modifiers[m].col);
+                        aux_dynamic_grid[i + modifiers[m].lin][j + modifiers[m].col] += 1;
                         break;
                     }
                 }
@@ -123,10 +121,8 @@ Function_Status single_diffusion(bool is_moving)
         }
     }
 
-    if( sum_grids(exits_set.dynamic_floor_field, aux) == FAILURE)
+    if( sum_grids(exits_set.dynamic_floor_field, aux_dynamic_grid) == FAILURE)
         return FAILURE;
-
-    deallocate_grid((void **) aux, cli_args.global_line_number);
 
     return SUCCESS;
 } 
@@ -143,12 +139,11 @@ Function_Status single_diffusion(bool is_moving)
  */
 Function_Status multiple_diffusion()
 {
-    Int_Grid aux = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    static Location modifiers[] = {{-1,0}, {0,-1}, {0,1}, {1,0}}; // Diffusion doesn't occur in the diagonals.
     
-    Location modifiers[] = {{-1,0}, {0,-1}, {0,1}, {1,0}}; // Diffusion doesn't occur in the diagonals.
-
-    if(aux == NULL)
+    if( fill_integer_grid(aux_dynamic_grid, cli_args.global_line_number, cli_args.global_column_number, 0) == FAILURE)
         return FAILURE;
+    // Reset to 0 all positions of the auxiliary grid.
 
     for(int i = 0; i < cli_args.global_line_number; i++)
     {
@@ -167,17 +162,15 @@ Function_Status multiple_diffusion()
 
                     if(probability_test(cli_args.alpha))
                     {
-                        aux[i + modifiers[m].lin][j + modifiers[m].col] += 1;
+                        aux_dynamic_grid[i + modifiers[m].lin][j + modifiers[m].col] += 1;
                     }
                 }
             }
         }
     }
     
-    if( sum_grids(exits_set.dynamic_floor_field, aux) == FAILURE)
+    if( sum_grids(exits_set.dynamic_floor_field, aux_dynamic_grid) == FAILURE)
         return FAILURE;
     
-    deallocate_grid((void **) aux, cli_args.global_line_number);
-
     return SUCCESS;
 } 

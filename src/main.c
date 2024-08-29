@@ -192,11 +192,6 @@ static Function_Status run_simulations(FILE *output_file)
             if(cli_args.show_debug_information)
                 print_int_grid(exits_set.dynamic_floor_field);
 
-            decay();
-            // When the particle moves instead of the creation of particles, it generates results closer to the article.
-            if(single_diffusion(true) == FAILURE)
-                return FAILURE;
-
             evaluate_pedestrians_movements();
             
             if(!cli_args.allow_X_movement)
@@ -220,6 +215,10 @@ static Function_Status run_simulations(FILE *output_file)
                 print_pedestrian_position_grid(output_file, simu_index,number_timesteps);
             }
 
+            decay();
+            // When the particle moves instead of the creation of particles, it generates results closer to the article.
+            if(single_diffusion(true) == FAILURE)
+                return FAILURE;
         }
 
         if(origin_uses_static_pedestrians() == true)
@@ -280,4 +279,5 @@ static void deallocate_program_structures(FILE *output_file, FILE *auxiliary_fil
     deallocate_grid((void **) exits_only_grid,cli_args.global_line_number);
     deallocate_grid((void **) pedestrian_position_grid,cli_args.global_line_number);
     deallocate_grid((void **) heatmap_grid,cli_args.global_line_number);
+    deallocate_grid((void **) aux_dynamic_grid, cli_args.global_line_number);
 }

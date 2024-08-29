@@ -25,5 +25,6 @@ extern Int_Grid environment_only_grid;
 extern Int_Grid exits_only_grid;
 extern Int_Grid pedestrian_position_grid;
 extern Int_Grid heatmap_grid;
+extern Int_Grid aux_dynamic_grid;
 
 #endif

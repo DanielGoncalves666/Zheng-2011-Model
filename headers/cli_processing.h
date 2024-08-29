@@ -22,6 +22,8 @@ typedef struct{
     bool allow_X_movement;
     bool single_exit_flag;
     bool use_density; // Indicates if the number os pedestrians to be inserted (if the case) is to be based on the density or in the total_num_pedestrians.
+    bool velocity_density_field; // Indicates if the dynamic field is defined as a velocity density field or not (i.e, a particle density field).
+    bool ignore_latest_self_trace;
     int global_line_number;
     int global_column_number;
     int num_simulations;
