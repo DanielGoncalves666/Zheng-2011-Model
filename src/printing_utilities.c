@@ -24,7 +24,7 @@ void print_full_command(FILE *output_stream)
 {
 	if(output_stream != NULL)
 	{
-		fprintf(output_stream, "./kirchner.sh%s", cli_args.full_command);
+		fprintf(output_stream, "./zheng.sh%s", cli_args.full_command);
 		fprintf(output_stream,"\n--------------------------------------------------------------\n\n");
 	}
 	else

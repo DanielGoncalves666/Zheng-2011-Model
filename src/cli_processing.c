@@ -15,8 +15,8 @@
 
 #include"../headers/cli_processing.h"
 
-const char * argp_program_version = "Implementation of the Kirchner model for pedestrian evacuation using cellular automata.";
-const char doc[] = "kirchner - Simulates pedestrian evacuation using the Kirchner (2002) model."
+const char * argp_program_version = "Implementation of the Zheng model for pedestrian evacuation in fire-affected environments using cellular automata.";
+const char doc[] = "zheng - Simulates pedestrian evacuation using the Zheng (2011) model."
 "\v"
 "If no file is provided with --env-file, the varas_queue.txt file will be used.\n"
 "The file provided with --auxiliary-file must contain, on each line, the coordinates of the exits for a single simulation set. The syntax to be used is described in the project's readme.\n"
