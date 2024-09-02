@@ -41,7 +41,7 @@ typedef struct{
 
 #define TOLERANCE 1E-10
 
-#define WALL_CELL -1000
+#define IMPASSABLE_OBJECT -1000
 #define EXIT_CELL -1001
 #define EMPTY_CELL -1002
 

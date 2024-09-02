@@ -21,7 +21,7 @@ bool is_within_grid_columns(int column_coordinate);
 bool is_cell_empty(Location coordinates);
 void deallocate_grid(void **grid, int line_number);
 
-extern Int_Grid environment_only_grid;
+extern Int_Grid obstacle_grid;
 extern Int_Grid exits_only_grid;
 extern Int_Grid pedestrian_position_grid;
 extern Int_Grid heatmap_grid;

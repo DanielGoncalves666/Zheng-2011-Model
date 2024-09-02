@@ -109,12 +109,12 @@ Function_Status open_output_file(FILE **output_file)
 */
 Function_Status allocate_grids()
 {
-    environment_only_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    obstacle_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     exits_only_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     pedestrian_position_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     heatmap_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     aux_dynamic_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
-    if(environment_only_grid == NULL || exits_only_grid == NULL || pedestrian_position_grid == NULL 
+    if(obstacle_grid == NULL || exits_only_grid == NULL || pedestrian_position_grid == NULL 
                                      || heatmap_grid == NULL    || aux_dynamic_grid == NULL)
     {
         fprintf(stderr,"Failure during allocation of the integer grids with dimensions: %d x %d.\n", cli_args.global_line_number, cli_args.global_column_number);
@@ -147,6 +147,9 @@ Function_Status load_environment()
 
     if(fill_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number, 0) == FAILURE)
         return FAILURE;
+
+    if(fill_integer_grid(exits_only_grid, cli_args.global_line_number, cli_args.global_column_number, EMPTY_CELL) == FAILURE)
+        return FAILURE;    
 
     char read_char = '\0';
     int returned_value = fscanf(environment_file,"%c",&read_char);// responsible for eliminating the '\n' after the environment dimensions.
@@ -199,9 +202,9 @@ Function_Status generate_environment()
         for(int h = 0; h < cli_args.global_column_number; h++)
         {
             if(i > 0 && i < cli_args.global_line_number - 1 && h > 0 && h < cli_args.global_column_number - 1)
-                environment_only_grid[i][h] = EMPTY_CELL;
+                obstacle_grid[i][h] = EMPTY_CELL;
             else
-                environment_only_grid[i][h] = WALL_CELL;
+                obstacle_grid[i][h] = IMPASSABLE_OBJECT;
         }
     }
 
@@ -333,7 +336,7 @@ int count_number_empty_cells()
     {
         for(int j = 0; j < cli_args.global_column_number; j++)
         {
-            if(environment_only_grid[i][j] == EMPTY_CELL)
+            if(obstacle_grid[i][j] == EMPTY_CELL)
                 count++;
         }
     }
@@ -379,7 +382,7 @@ static Function_Status symbol_processing(char read_char, Location coordinates)
     switch(read_char)
     {
         case '#':
-            environment_only_grid[coordinates.lin][coordinates.col] = WALL_CELL;
+            obstacle_grid[coordinates.lin][coordinates.col] = IMPASSABLE_OBJECT;
             break;
         case '_':
             if(origin_uses_static_exits() == true)
@@ -387,15 +390,16 @@ static Function_Status symbol_processing(char read_char, Location coordinates)
                 if(add_new_exit(coordinates) == FAILURE)
                     return FAILURE;
                 
-                environment_only_grid[coordinates.lin][coordinates.col] = WALL_CELL;
+                obstacle_grid[coordinates.lin][coordinates.col] = IMPASSABLE_OBJECT;
                 exits_only_grid[coordinates.lin][coordinates.col] = EXIT_CELL;
             }
             else
-                environment_only_grid[coordinates.lin][coordinates.col] = WALL_CELL;
+                obstacle_grid[coordinates.lin][coordinates.col] = IMPASSABLE_OBJECT;
                 // If a exit is located in the middle of the environment a Wall is still put there.
             break;
         case '.':
-            environment_only_grid[coordinates.lin][coordinates.col] = EMPTY_CELL;
+            obstacle_grid[coordinates.lin][coordinates.col] = EMPTY_CELL;
+
             break;
         case 'p':
         case 'P':
@@ -406,7 +410,7 @@ static Function_Status symbol_processing(char read_char, Location coordinates)
 
                 pedestrian_position_grid[coordinates.lin][coordinates.col] = pedestrian_set.list[pedestrian_set.num_pedestrians - 1]->id;
             }
-            environment_only_grid[coordinates.lin][coordinates.col] = EMPTY_CELL;
+            obstacle_grid[coordinates.lin][coordinates.col] = EMPTY_CELL;
 
             break;
         case '\n':

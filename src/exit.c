@@ -105,7 +105,7 @@ Function_Status calculate_kirchner_static_field()
     Location *exit_cell_coordinates = NULL; // A list of all the exit cells coordinates.
 
     fill_double_grid(exits_set.static_floor_field, cli_args.global_line_number, cli_args.global_column_number, -1);
-    copy_grid_structure(exits_set.static_floor_field, environment_only_grid); // Copies the structure of the environment
+    copy_grid_structure(exits_set.static_floor_field, obstacle_grid); // Copies the structure of the environment
 
     // Assign a value of -1 to all exit cells. Cells marked with -1 will have their static floor field values calculated next.
     // Additionally, construct a list containing the coordinates of all exit cells to simplify further processing.
@@ -134,7 +134,7 @@ Function_Status calculate_kirchner_static_field()
     {
         for(int j = 0; j < cli_args.global_column_number; j++)
         {
-            if(exits_set.static_floor_field[i][j] == WALL_CELL)
+            if(exits_set.static_floor_field[i][j] == IMPASSABLE_OBJECT)
                 continue;
 
             for(int cell_index = 0; cell_index < num_exit_cells; cell_index++)
@@ -155,7 +155,7 @@ Function_Status calculate_kirchner_static_field()
     {
         for(int j = 0; j < cli_args.global_column_number; j++)
         {
-            if(exits_set.static_floor_field[i][j] == WALL_CELL)
+            if(exits_set.static_floor_field[i][j] == IMPASSABLE_OBJECT)
                 continue; 
 
             double normalized_distance = maximum_value - exits_set.static_floor_field[i][j];
@@ -288,7 +288,7 @@ static Function_Status calculate_static_weight(Exit current_exit)
             {
                 double current_cell_value = static_weight[i][h];
 
-                if(current_cell_value == WALL_CELL || current_cell_value == 0.0) // floor field calculations occur only on cells with values
+                if(current_cell_value == IMPASSABLE_OBJECT || current_cell_value == 0.0) // floor field calculations occur only on cells with values
                     continue;
 
                 for(int j = -1; j < 2; j++)
@@ -301,7 +301,7 @@ static Function_Status calculate_static_weight(Exit current_exit)
                         if(! is_within_grid_columns(h + k))
                             continue;
 
-                        if(static_weight[i + j][h + k] == WALL_CELL || static_weight[i + j][h + k] == EXIT_CELL)
+                        if(static_weight[i + j][h + k] == IMPASSABLE_OBJECT || static_weight[i + j][h + k] == EXIT_CELL)
                             continue;
 
                         if(j != 0 && k != 0)
@@ -336,7 +336,7 @@ static Function_Status calculate_static_weight(Exit current_exit)
 }
 
 /**
- * Copies the structure (obstacles and walls) from the environment_only_grid to the static weight grid 
+ * Copies the structure (obstacles and walls) from the obstacle_grid to the static weight grid 
  * for the provided exit. Additionally, adds the exit cells to it.
  * 
  * @param current_exit The exit for which the static weights will be initialized.
@@ -350,9 +350,9 @@ static void initialize_static_weight_grid(Exit current_exit)
     {
         for(int h = 0; h < cli_args.global_column_number; h++)
         {
-            double cell_value = environment_only_grid[i][h];
-            if(cell_value == WALL_CELL)
-                current_exit->static_weight[i][h] = WALL_CELL;
+            double cell_value = obstacle_grid[i][h];
+            if(cell_value == IMPASSABLE_OBJECT)
+                current_exit->static_weight[i][h] = IMPASSABLE_OBJECT;
             else
                 current_exit->static_weight[i][h] = 0.0;
         }
@@ -395,7 +395,7 @@ static bool is_exit_accessible(Exit current_exit)
                     continue;
 
                 // De floor_field para static_weight AQUI
-                if(current_exit->static_weight[c.lin + j][c.col + k] == WALL_CELL || current_exit->static_weight[c.lin + j][c.col + k] == EXIT_CELL)
+                if(current_exit->static_weight[c.lin + j][c.col + k] == IMPASSABLE_OBJECT || current_exit->static_weight[c.lin + j][c.col + k] == EXIT_CELL)
                     continue;
 
                 if(j != 0 && k != 0)

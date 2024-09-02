@@ -13,8 +13,11 @@
 #include"../headers/cli_processing.h"
 #include"../headers/shared_resources.h"
 
-Int_Grid environment_only_grid = NULL; // Grid containing only the structure and obstacles.
+Int_Grid obstacle_grid = NULL; // Grid containing walls and obstacles.
+                               // Contains cells with either IMPASSABLE_OBJECT or EMPTY_CELL values.
+                               // Any cell with an exit is assigned IMPASSABLE_OBJECT value.
 Int_Grid exits_only_grid = NULL; // Grid containing only the exits.
+                                 // Contains cells with either EXIT_CELL or EMPTY_CELL values.
 Int_Grid pedestrian_position_grid = NULL; // Grid containing pedestrians at their respective positions.
 Int_Grid heatmap_grid = NULL; // Grid containing the count of pedestrian visits per cell.
 Int_Grid aux_dynamic_grid = NULL; // Grid used to help in the diffusion process.
@@ -288,13 +291,13 @@ bool is_diagonal_valid(Location origin_cell, Location coordinate_modifier, Doubl
     bool is_vertical_blocked = false;// Indicates if the vertical cell in the origin_cell's neighborhood, which is adjacent to origin_cell + coordinate_modifier, is blocked.
 
     if(is_within_grid_lines(origin_cell.lin + coordinate_modifier.lin) && 
-    floor_field[origin_cell.lin + coordinate_modifier.lin][origin_cell.col] == WALL_CELL)
+    floor_field[origin_cell.lin + coordinate_modifier.lin][origin_cell.col] == IMPASSABLE_OBJECT)
     {
         is_vertical_blocked = true;
     }
 
     if(is_within_grid_columns(origin_cell.col + coordinate_modifier.col) && 
-    floor_field[origin_cell.lin][origin_cell.col + coordinate_modifier.col] == WALL_CELL)
+    floor_field[origin_cell.lin][origin_cell.col + coordinate_modifier.col] == IMPASSABLE_OBJECT)
     {
         is_horizontal_blocked = true;
     }
@@ -343,7 +346,7 @@ bool is_cell_empty(Location coordinates)
     if(pedestrian_position_grid[coordinates.lin][coordinates.col] != 0)
         return false;
 
-    if(environment_only_grid[coordinates.lin][coordinates.col] != EMPTY_CELL)
+    if(obstacle_grid[coordinates.lin][coordinates.col] != EMPTY_CELL)
         return false;
 
     if(exits_only_grid[coordinates.lin][coordinates.col] != EMPTY_CELL)

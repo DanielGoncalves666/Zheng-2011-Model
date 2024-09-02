@@ -92,7 +92,7 @@ Function_Status single_diffusion(bool is_moving)
                         continue;
                     }
                     
-                    if(exits_set.static_floor_field[i + modifiers[m].lin][j + modifiers[m].col] == WALL_CELL)
+                    if(exits_set.static_floor_field[i + modifiers[m].lin][j + modifiers[m].col] == IMPASSABLE_OBJECT)
                     {
                         valid_neighbors--;
                         continue; // The static floor field shows where the exits are, so they can still receive particles.
@@ -157,7 +157,7 @@ Function_Status multiple_diffusion()
                     if(! is_within_grid_lines(i + modifiers[m].lin) || ! is_within_grid_columns(j + modifiers[m].col))
                         continue;
                     
-                    if(exits_set.static_floor_field[i + modifiers[m].lin][j + modifiers[m].col] == WALL_CELL)
+                    if(exits_set.static_floor_field[i + modifiers[m].lin][j + modifiers[m].col] == IMPASSABLE_OBJECT)
                         continue; // The static floor field shows where the exits are
 
                     if(probability_test(cli_args.alpha))

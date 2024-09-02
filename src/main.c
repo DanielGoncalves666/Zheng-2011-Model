@@ -275,7 +275,7 @@ static void deallocate_program_structures(FILE *output_file, FILE *auxiliary_fil
     deallocate_pedestrians();
     deallocate_exits();
     
-    deallocate_grid((void **) environment_only_grid,cli_args.global_line_number);
+    deallocate_grid((void **) obstacle_grid,cli_args.global_line_number);
     deallocate_grid((void **) exits_only_grid,cli_args.global_line_number);
     deallocate_grid((void **) pedestrian_position_grid,cli_args.global_line_number);
     deallocate_grid((void **) heatmap_grid,cli_args.global_line_number);

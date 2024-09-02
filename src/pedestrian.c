@@ -562,7 +562,7 @@ void calculate_transition_probabilities(Pedestrian current_pedestrian)
                 if(! (i == 1 && j == 1)) // Ignores when is the pedestrian's cell.
                     current_pedestrian->probabilities[i][j] *= 1 - (pedestrian_position_grid[lin + i - 1][col + j - 1] > 0 ? 1 : 0); // Multiply by 0 if cell is occupied
                 
-                current_pedestrian->probabilities[i][j] *= exits_set.static_floor_field[lin + i - 1][col + j - 1] == WALL_CELL ? 0 : 1; // Multiply by 0 if cell has an obstacle.
+                current_pedestrian->probabilities[i][j] *= exits_set.static_floor_field[lin + i - 1][col + j - 1] == IMPASSABLE_OBJECT ? 0 : 1; // Multiply by 0 if cell has an obstacle.
             
                 normalization_value += current_pedestrian->probabilities[i][j];
             }
