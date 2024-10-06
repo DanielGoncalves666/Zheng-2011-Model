@@ -14,6 +14,8 @@
 
 #include"../headers/grid.h"
 #include"../headers/exit.h"
+#include"../headers/fire_field.h"
+#include"../headers/fire_dynamics.h"
 #include"../headers/pedestrian.h"
 #include"../headers/initialization.h"
 #include"../headers/cli_processing.h"
@@ -25,6 +27,7 @@ const char *output_path = "output/";
 
 static Function_Status open_environment_file(FILE **environment_file);
 static Function_Status symbol_processing(char read_char, Location coordinates);
+static void set_all_private_grids();
 
 /**
  * Opens the auxiliary file in read mode.  
@@ -111,11 +114,15 @@ Function_Status allocate_grids()
 {
     obstacle_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     exits_only_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    fire_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    initial_fire_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     pedestrian_position_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    fire_distance_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     heatmap_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
-    aux_dynamic_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    risky_cells_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     if(obstacle_grid == NULL || exits_only_grid == NULL || pedestrian_position_grid == NULL 
-                                     || heatmap_grid == NULL    || aux_dynamic_grid == NULL)
+    || fire_grid == NULL     || heatmap_grid == NULL    || fire_distance_grid == NULL
+    || initial_fire_grid == NULL     || risky_cells_grid == NULL)
     {
         fprintf(stderr,"Failure during allocation of the integer grids with dimensions: %d x %d.\n", cli_args.global_line_number, cli_args.global_column_number);
         return FAILURE;
@@ -151,6 +158,9 @@ Function_Status load_environment()
     if(fill_integer_grid(exits_only_grid, cli_args.global_line_number, cli_args.global_column_number, EMPTY_CELL) == FAILURE)
         return FAILURE;    
 
+    if(fill_integer_grid(initial_fire_grid, cli_args.global_line_number, cli_args.global_column_number, EMPTY_CELL) == FAILURE)
+        return FAILURE;
+
     char read_char = '\0';
     int returned_value = fscanf(environment_file,"%c",&read_char);// responsible for eliminating the '\n' after the environment dimensions.
     for(int i = 0; i < cli_args.global_line_number; i++)
@@ -181,6 +191,8 @@ Function_Status load_environment()
             return FAILURE;
         }
     }
+
+    set_all_private_grids();
 
     fclose(environment_file);
 
@@ -320,6 +332,8 @@ Function_Status get_next_simulation_set(FILE *auxiliary_file, int *exit_number)
 
     *exit_number = exit_count;
 
+    set_all_private_grids();
+
     return SUCCESS;
 }
 
@@ -378,7 +392,7 @@ static Function_Status open_environment_file(FILE **environment_file)
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
 */
 static Function_Status symbol_processing(char read_char, Location coordinates)
-{
+{   
     switch(read_char)
     {
         case '#':
@@ -413,6 +427,12 @@ static Function_Status symbol_processing(char read_char, Location coordinates)
             obstacle_grid[coordinates.lin][coordinates.col] = EMPTY_CELL;
 
             break;
+        case '*':
+            initial_fire_grid[coordinates.lin][coordinates.col] = FIRE_CELL;
+            obstacle_grid[coordinates.lin][coordinates.col] = EMPTY_CELL;
+
+            cli_args.fire_is_present = true;
+            break;
         case '\n':
             break;
         default:
@@ -421,4 +441,15 @@ static Function_Status symbol_processing(char read_char, Location coordinates)
     }
 
     return SUCCESS;
+}
+
+/**
+ * Sets the private_structure_grid of all the exits.
+ */
+static void set_all_private_grids()
+{
+    for(int exit_index = 0; exit_index < exits_set.num_exits; exit_index++)
+    {
+        set_private_grid_data(exits_set.list[exit_index]);
+    }
 }

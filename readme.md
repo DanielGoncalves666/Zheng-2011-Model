@@ -17,7 +17,7 @@ The term **simulation set** refers to a group of simulations with the same param
 To compile and run the program, execute the following command in your shell, replacing `[arguments]` with the desired command-line arguments:
 
 ```bash
-./kirchner.sh [arguments]
+./zheng.sh [arguments]
 ```
 
 ## Input and Output Files
@@ -29,7 +29,8 @@ The environment files must be placed in the `environment/` directory. Each file 
 |Symbol    | Meaning              |
 |    ---   |        ---           |
 | \#       | Walls and obstacles  |
-| p or P   | Pedestrians          |
+| *        | Fire                 |
+| p / P    | Pedestrians          |
 | _        | Exits                |
 | .        | Nothing              |
 
@@ -112,8 +113,6 @@ Simulation Variables (optional):
   
 Variables and toggle options related to pedestrians (all optional):
 
-      --allow-x-movement     The movement of pedestrians isn't restricted when
-                             X movements occur.
       --avoid-corner-movement   Prevents movement in the corners of walls and
                              obstacles. A single diagonal movement through the
                              corner of a obstacle becomes three movements.
@@ -135,12 +134,6 @@ Kirchner model constants and options:
       --density=DENSITY      The percentage of unoccupied cells in the
                              environment that should be filled by pedestrians.
                              Defaults to 0.3.
-      --dyn-definition=DYN   Determines how the dynamic floor field is defined,
-                             either as a virtual velocity density field or a
-                             particle density field.
-      --ignore-self-trace    When calculating transition probabilities for a
-                             pedestrian, ignores the most recent particle
-                             deposited by that pedestrian.
       --kd=KD                The dynamic field coupling constant that
                              determines the strength of the dynamic floor field
                              when calculating the transition probabilities for
@@ -151,6 +144,44 @@ Kirchner model constants and options:
                              calculating the transition probabilities for
                              pedestrians. Must be non-negative. Defaults to
                              0.5. Defaults to 1.
+  
+Zheng model constants and options:
+
+      --fire-alpha=FIRE-ALPHA   The value of the second parameter to adjust the
+                             strength of the fire floor field. If a pedestrian
+                             is closer than RISK, then this value is used in
+                             the calculation of the transition probabilities
+                             (instead of 1). This has the effect that the
+                             pedestrians are more willing to pass closer to a
+                             fire if that means they can exit the environment.
+                             Defaults to 0.5.
+      --fire-gamma=FIRE_GAMMA   A constant used in the calculation of the fire
+                             floor field. If the distance from a cell to a cell
+                             with fire is greater than FIRE_GAMMA, the fire
+                             floor field (FF) value of that cell will be 0.
+                             Otherwise, the value will be equal to or greater
+                             than 0. The default value of FIRE_GAMMA is 8.
+      --kf=KF                The fire field coupling constant is one of the
+                             parameters used to adjust the strength of the fire
+                             floor field. Defaults to 1.
+      --mu=MU                The probability that, in a conflict where multiple
+                             pedestrians attempt to move to the same cell, no
+                             one will successfully move. Value must be between
+                             0 and 1, both inclusive. Defaults to 0.1.
+      --omega=OMEGA          In the Zheng paper, pedestrians try to maintain
+                             their preferred direction and velocity. The
+                             constant Omega increases the probability that a
+                             pedestrian will move to cells aligned with their
+                             preferred direction. Must be a value greater or
+                             equal to 1. Defaults to 1.
+      --risk-distance=RISK   The maximum distance (exclusive) within which a
+                             pedestrian near an exit is willing to take more
+                             risks to attempt to leave the environment. In
+                             fact, what happens is that the second parameter
+                             used to adjust the strength of the fire floor
+                             field will be FIRE-ALPHA. Defaults to 6.
+      --spread-rate=RATE     The velocity, in meters per second, that the fire
+                             spreads in the environment. Defaults to 0.1 m/s.
   
 Range values for simulation focused on a constant:
 

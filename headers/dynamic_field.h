@@ -4,8 +4,6 @@
 #include"shared_resources.h"
 
 void increase_particle_at(Location coordinates);
-void decay();
-Function_Status single_diffusion(bool is_moving);
-Function_Status multiple_diffusion();
+Function_Status apply_decay_and_diffusion();
 
 #endif

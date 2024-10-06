@@ -10,17 +10,15 @@
 #include<stdbool.h>
 
 #include"../headers/grid.h"
+#include"../headers/fire_dynamics.h"
 #include"../headers/cli_processing.h"
 #include"../headers/shared_resources.h"
 
 Int_Grid obstacle_grid = NULL; // Grid containing walls and obstacles.
                                // Contains cells with either IMPASSABLE_OBJECT or EMPTY_CELL values.
                                // Any cell with an exit is assigned IMPASSABLE_OBJECT value.
-Int_Grid exits_only_grid = NULL; // Grid containing only the exits.
-                                 // Contains cells with either EXIT_CELL or EMPTY_CELL values.
-Int_Grid pedestrian_position_grid = NULL; // Grid containing pedestrians at their respective positions.
+Int_Grid risky_cells_grid = NULL; // Grid containing either 1 for cells that are one unit distance between the corder of the fire and a wall (or impassable obstacle) or 0 otherwise. 
 Int_Grid heatmap_grid = NULL; // Grid containing the count of pedestrian visits per cell.
-Int_Grid aux_dynamic_grid = NULL; // Grid used to help in the diffusion process.
 
 /**
  * Dynamically allocates an integer matrix of dimensions determined by the function parameters.
@@ -169,6 +167,40 @@ Function_Status fill_double_grid(Double_Grid double_grid, int line_number, int c
 /**
  * Copy the content of the source grid to the destination grid.
  *
+ * @param destination Integer grid where the content is to be copied.
+ * @param source Integer grid to be copied.
+ * @return Function_Status: FAILURE (0) or SUCCESS (1).
+ * 
+ * @note Both grids must be of  global size (lines and columns). Otherwise, undefined behavior will happen.
+ */
+Function_Status copy_integer_grid(Int_Grid destination, Int_Grid source)
+{
+    if(destination == NULL || source == NULL)
+    {
+        fprintf(stderr, "The destination or/and source grids received by 'copy_integer_grid' was a null pointer.\n");
+        return FAILURE;
+    }
+
+    for(int i = 0; i < cli_args.global_line_number; i++)
+    {
+        if(destination[i] == NULL || source[i] == NULL)
+        {
+            fprintf(stderr, "The line %d of destination or/and source in 'copy_integer_grid' was a null pointer.\n", i);
+            return FAILURE;
+        }
+
+        for(int h = 0; h < cli_args.global_column_number; h++)
+        {
+            destination[i][h] = source[i][h];
+        }
+    }
+
+    return SUCCESS;
+}
+
+/**
+ * Copy the content of the source grid to the destination grid.
+ *
  * @param destination Double grid where the content is to be copied.
  * @param source Double grid to be copied.
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
@@ -200,20 +232,22 @@ Function_Status copy_double_grid(Double_Grid destination, Double_Grid source)
     return SUCCESS;
 }
 
+
+
 /**
- * Copy the cells with structures (Walls and obstacles) from the source grid to the destination grid.
+ * Copy the cells that aren't EMPTY_CELL from the source grid to the destination grid.
  *
- * @param destination Double grid where the content is to be copied.
+ * @param destination Integer grid where the content is to be copied.
  * @param source Int grid fro which the data will be extracted.
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
  * 
  * @note Both grids must be of global size (lines and columns). Otherwise, undefined behavior will happen.
  */
-Function_Status copy_grid_structure(Double_Grid destination, Int_Grid source)
+Function_Status copy_non_empty_cells(Int_Grid destination, Int_Grid source)
 {
     if(destination == NULL || source == NULL)
     {
-        fprintf(stderr, "The destination or/and source grids received by 'copy_grid_structure' was a null pointer.\n");
+        fprintf(stderr, "The destination or/and source grids received by 'copy_non_empty_cells' was a null pointer.\n");
         return FAILURE;
     }
 
@@ -221,7 +255,7 @@ Function_Status copy_grid_structure(Double_Grid destination, Int_Grid source)
     {
         if(destination[i] == NULL || source[i] == NULL)
         {
-            fprintf(stderr, "The line %d of destination or/and source in 'copy_grid_structure' was a null pointer.\n", i);
+            fprintf(stderr, "The line %d of destination or/and source in 'copy_non_empty_cells' was a null pointer.\n", i);
             return FAILURE;
         }
 
@@ -231,6 +265,45 @@ Function_Status copy_grid_structure(Double_Grid destination, Int_Grid source)
                 continue;
 
             destination[i][j] = source[i][j];
+        }
+    }
+
+    return SUCCESS;
+}
+
+
+/**
+ * Identify the cells that aren't EMPTY_CELL from the source grid and replace the cells in the same coordinates of the destination grid with value.
+ *
+ * @param destination Double grid where the content is to be copied.
+ * @param source Int grid fro which the data will be extracted.
+ * @param value The value to be used as replacement.
+ * @return Function_Status: FAILURE (0) or SUCCESS (1).
+ * 
+ * @note Both grids must be of global size (lines and columns). Otherwise, undefined behavior will happen.
+ */
+Function_Status replace_non_empty_cells(Double_Grid destination, Int_Grid source, double value)
+{
+    if(destination == NULL || source == NULL)
+    {
+        fprintf(stderr, "The destination or/and source grids received by 'replace_non_empty_cells' was a null pointer.\n");
+        return FAILURE;
+    }
+
+    for(int i = 0; i < cli_args.global_line_number; i++)
+    {
+        if(destination[i] == NULL || source[i] == NULL)
+        {
+            fprintf(stderr, "The line %d of destination or/and source in 'replace_non_empty_cells' was a null pointer.\n", i);
+            return FAILURE;
+        }
+
+        for(int j = 0; j < cli_args.global_column_number; j++)
+        {
+            if(source[i][j] == EMPTY_CELL)
+                continue;
+
+            destination[i][j] = value;
         }
     }
 
@@ -271,88 +344,6 @@ Function_Status sum_grids(Int_Grid destination, Int_Grid source)
     }
 
     return SUCCESS;
-}
-
-/**
- * Verifies if a diagonal beginning at origin_cell and ending at origin_cell + coordinate_modifier is valid for crossing 
- * in the given floor field. 
- * If there are obstacles on both sides, then the diagonal is not valid. If the prevent_corner_crossing flag is True, 
- * then diagonals with at least one obstacle on its sides are not valid.
- *
- * @param origin_cell Origin cell coordinates. Represents where a pedestrian is or a cell whose neighborhood is being calculated.
- * @param coordinate_modifier Line and column coordinate modifiers. They are added to the origin cell coordinates, and the final 
- * result represents one of the four diagonal cells in the origin cell's neighborhood.
- * @param floor_field A Double_Grid representing a floor field.
- * @return bool, where True indicates that a diagonal is valid and False otherwise.
- */
-bool is_diagonal_valid(Location origin_cell, Location coordinate_modifier, Double_Grid floor_field)
-{
-    bool is_horizontal_blocked = false; // Indicates if the horizontal cell in the origin_cell's neighborhood, which is adjacent to origin_cell + coordinate_modifier, is blocked.
-    bool is_vertical_blocked = false;// Indicates if the vertical cell in the origin_cell's neighborhood, which is adjacent to origin_cell + coordinate_modifier, is blocked.
-
-    if(is_within_grid_lines(origin_cell.lin + coordinate_modifier.lin) && 
-    floor_field[origin_cell.lin + coordinate_modifier.lin][origin_cell.col] == IMPASSABLE_OBJECT)
-    {
-        is_vertical_blocked = true;
-    }
-
-    if(is_within_grid_columns(origin_cell.col + coordinate_modifier.col) && 
-    floor_field[origin_cell.lin][origin_cell.col + coordinate_modifier.col] == IMPASSABLE_OBJECT)
-    {
-        is_horizontal_blocked = true;
-    }
-
-    if(is_vertical_blocked && is_horizontal_blocked)
-        return false; // The diagonal cell is completely blocked.
-
-    if(cli_args.prevent_corner_crossing && (is_vertical_blocked || is_horizontal_blocked))
-        return false; // The diagonal is blocked by the corner of one obstacle. The prevent_corner_crossing flag indicates that this condition validates as a blocked diagonal or not.
-
-    return true;
-}
-
-/**
- * Verifies if the value passed to the function is within the grid lines limits, i. e., 0 <= line_coordinate < cli_args.global_line_number.
- * 
- * @param line_coordinate Line coordinate to be tested.
- * @return bool, where True indicates that the value passed is within limits, or False otherwise.
-*/
-bool is_within_grid_lines(int line_coordinate)
-{
-    return line_coordinate >= 0 && line_coordinate < cli_args.global_line_number;
-}
-
-/**
- * Verifies if the value passed to the function is within the grid column limits, i. e., 
- * 0 <= column_coordinate < cli_args.global_column_number.
- * 
- * @param column_coordinate Column coordinate to be tested.
- * @return bool, where True indicates that the value passed is within limits, or False otherwise.
-*/
-bool is_within_grid_columns(int column_coordinate)
-{
-    return column_coordinate >= 0 && column_coordinate < cli_args.global_column_number;
-}
-
-
-/**
- * Verifies if the cell in the given location is empty (i.e., not occupied by a pedestrian, door, obstacle or wall).
- * 
- * @param coordinates The coordinates of the cell
- * @return bool, where True indicates that the cell is indeed empty, or False otherwise.
- */
-bool is_cell_empty(Location coordinates)
-{
-    if(pedestrian_position_grid[coordinates.lin][coordinates.col] != 0)
-        return false;
-
-    if(obstacle_grid[coordinates.lin][coordinates.col] != EMPTY_CELL)
-        return false;
-
-    if(exits_only_grid[coordinates.lin][coordinates.col] != EMPTY_CELL)
-        return false;
-
-    return true;
 }
 
 /**

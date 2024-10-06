@@ -41,9 +41,14 @@ typedef struct{
 
 #define TOLERANCE 1E-10
 
+#define CELL_LENGTH 0.4
+#define TIMESTEP_TIME (4.0 / 15)
+
 #define IMPASSABLE_OBJECT -1000
 #define EXIT_CELL -1001
+#define BLOCKED_EXIT_CELL -1004
 #define EMPTY_CELL -1002
+#define FIRE_CELL -1003
 
 bool origin_uses_auxiliary_data();
 bool origin_uses_static_pedestrians();

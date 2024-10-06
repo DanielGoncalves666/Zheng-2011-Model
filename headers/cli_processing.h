@@ -19,11 +19,9 @@ typedef struct{
     bool show_simulation_set_info;
     bool immediate_exit;
     bool prevent_corner_crossing;
-    bool allow_X_movement;
     bool single_exit_flag;
     bool use_density; // Indicates if the number os pedestrians to be inserted (if the case) is to be based on the density or in the total_num_pedestrians.
-    bool velocity_density_field; // Indicates if the dynamic field is defined as a velocity density field or not (i.e, a particle density field).
-    bool ignore_latest_self_trace;
+    bool fire_is_present;
     int global_line_number;
     int global_column_number;
     int num_simulations;
@@ -31,13 +29,20 @@ typedef struct{
     int seed;
     double diagonal;
     double alpha;
+    double fire_alpha;
+    double fire_gamma;
     double delta;
+    double omega;
+    double mu;
+    double risk_distance;
     double ks;
     double kd;
+    double kf;
     double density;
     double min;
     double max;
     double step;
+    double spread_rate;
 } Command_Line_Args;
 
 error_t parser_function(int key, char *arg, struct argp_state *state);

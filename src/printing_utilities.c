@@ -10,6 +10,7 @@
 #include<time.h>
 
 #include"../headers/exit.h"
+#include"../headers/fire_dynamics.h"
 #include"../headers/pedestrian.h"
 #include"../headers/cli_processing.h"
 #include"../headers/printing_utilities.h"
@@ -43,8 +44,8 @@ void print_heatmap(FILE *output_stream)
 	if(output_stream != NULL)
 	{
 		for(int i = 0; i < cli_args.global_line_number; i++){
-			for(int h = 0; h < cli_args.global_column_number; h++)
-				fprintf(output_stream, "%.2lf ", (double) heatmap_grid[i][h] / (double) cli_args.num_simulations);
+			for(int j = 0; j < cli_args.global_column_number; j++)
+				fprintf(output_stream, "%.2lf ", (double) heatmap_grid[i][j] / (double) cli_args.num_simulations);
 
 			fprintf(output_stream,"\n");
 		}
@@ -55,13 +56,13 @@ void print_heatmap(FILE *output_stream)
 }
 
 /**
- * Print the pedestrian position grid (with emojis instead of values) on the provided stream.
+ * Prints all elements of the environment (pedestrians, obstacles, walls, fire, exits and empty cells) to the provided stream.
  * 
  * @param output_stream Stream where the data will be written.
  * @param simulation_number Current simulation index
  * @param timestep Current simulation timestep.
 */
-void print_pedestrian_position_grid(FILE *output_stream, int simulation_number, int timestep)
+void print_complete_environment(FILE *output_stream, int simulation_number, int timestep)
 {
 	if(!cli_args.write_to_file)
 		printf("\e[1;1H\e[2J");
@@ -74,10 +75,17 @@ void print_pedestrian_position_grid(FILE *output_stream, int simulation_number, 
 			for(int j = 0; j < cli_args.global_column_number; j++)
 			{
 				if(pedestrian_position_grid[i][j] != 0)
-					fprintf(output_stream,"👤");
+				{
+					if(fire_grid[i][j] == FIRE_CELL)
+						fprintf(output_stream, "🪦");
+					else
+						fprintf(output_stream,"👤");
+				}
+				else if(fire_grid[i][j] == FIRE_CELL)
+					fprintf(output_stream, "🔥");
 				else if(exits_only_grid[i][j] == EXIT_CELL)
 					fprintf(output_stream,"🚪");
-				else if(exits_set.static_floor_field[i][j] == IMPASSABLE_OBJECT)
+				else if(obstacle_grid[i][j] == IMPASSABLE_OBJECT)
 					fprintf(output_stream,"🧱");
 				else if(pedestrian_position_grid[i][j] == 0)
 					fprintf(output_stream,"⬛");
@@ -87,19 +95,19 @@ void print_pedestrian_position_grid(FILE *output_stream, int simulation_number, 
 		fprintf(output_stream,"\n");
 	}
 	else
-		fprintf(stderr, "No valid stream was provided at print_pedestrian_position_grid.\n");		
+		fprintf(stderr, "No valid stream was provided at print_complete_environment.\n");		
 }
 
 /**
- * Print the integer grid to stdout.
+ * Prints the int_grid to the specified stream.
  * 
  * @param int_grid Integer grid to be printed.
 */
-void print_int_grid(Int_Grid int_grid)
+void print_int_grid(FILE *output_stream, Int_Grid int_grid)
 {
 	for(int i = 0; i < cli_args.global_line_number; i++){
-		for(int h = 0; h < cli_args.global_column_number; h++){
-			printf("%3d ", int_grid[i][h]);
+		for(int j = 0; j < cli_args.global_column_number; j++){
+			fprintf(output_stream, "%3d ", int_grid[i][j]);
 		}
 		printf("\n\n");
 	}
@@ -107,19 +115,55 @@ void print_int_grid(Int_Grid int_grid)
 }
 
 /**
- * Print the double grid to stdout.
+ * Prints the double_grid (using the provided precision) to the specified stream.
  * 
- * @param double_grid Double grid to be printed.
+ * @param output_stream Stream where the data will be written.
+ * @param double_grid Double_Grid to be printed.
+ * @param precision Precision of the printed value.
+ * 
 */
-void print_double_grid(Double_Grid double_grid)
+void print_double_grid(FILE *output_stream, Double_Grid double_grid, int precision)
 {
+	if(precision < 0)
+		precision = 0;
+
 	for(int i = 0; i < cli_args.global_line_number; i++){
-		for(int h = 0; h < cli_args.global_column_number; h++){
-			if(double_grid[i][h] >= 1000.0)
-				printf("%5.0lf ", double_grid[i][h]);
+		for(int j = 0; j < cli_args.global_column_number; j++)
+
+			if(double_grid[i][j] < 0)
+				fprintf(output_stream, "%*.0f ", 2 + precision, double_grid[i][j]);
 			else
-				printf("%5.1lf ", double_grid[i][h]);
-		}
+				fprintf(output_stream, "%5.*lf ", precision, double_grid[i][j]);
+
+		printf("\n\n");
+	}
+	printf("\n");
+}
+
+/**
+ * Prints the double_grid multiplied by the given value (using the provided precision) to the specified stream.
+ * 
+ * @note The multiplication doesn't alter the values within the grid. The operation is external to them.
+ * 
+ * @param output_stream Stream where the data will be written.
+ * @param double_grid Double_Grid to be printed.
+ * @param precision Precision of the printed value.
+ * @param value The value that will be multiplied to the grid.
+ * 
+*/
+void multiply_and_print_double_grid(FILE *output_stream, Double_Grid double_grid, int precision, double value)
+{
+	if(precision < 0)
+		precision = 0;
+
+	for(int i = 0; i < cli_args.global_line_number; i++){
+		for(int j = 0; j < cli_args.global_column_number; j++)
+
+			if(double_grid[i][j] < 0)
+				fprintf(output_stream, "%*.0f ", 2 + precision, value * double_grid[i][j]);
+			else
+				fprintf(output_stream, "%5.*lf ", precision, value * double_grid[i][j]);
+
 		printf("\n\n");
 	}
 	printf("\n");
@@ -178,6 +222,11 @@ void print_execution_status(int set_index, int set_quantity)
 	if(set_index != 0)
 	{
 		fprintf(stdout, "\033[A\033[2K");
+		/*
+			\033: Represents the escape character, equivalent to ESC.
+		  	[A: Moves the cursor up one line.
+		  	[2K: Clears the entire current line in the terminal.
+		 */
 		fflush(stdout);
 	}
 	

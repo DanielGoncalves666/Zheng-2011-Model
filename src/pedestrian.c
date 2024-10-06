@@ -10,18 +10,19 @@
 #include<stdbool.h>
 #include<math.h>
 
-#include"../headers/cell.h"
 #include"../headers/exit.h"
 #include"../headers/dynamic_field.h"
 #include"../headers/grid.h"
 #include"../headers/pedestrian.h"
 #include"../headers/cli_processing.h"
 #include"../headers/shared_resources.h"
+#include"../headers/static_field.h"
+#include"../headers/fire_dynamics.h"
+#include"../headers/fire_field.h"
 
-typedef struct reduced_line_equation{
-    double angular_coefficient;
-    double linear_coefficient; // Where the line intersects the y-axis.
-}reduced_line_equation;
+#include"../headers/printing_utilities.h"
+
+Int_Grid pedestrian_position_grid = NULL; // Grid containing pedestrians at their respective positions.
 
 typedef struct cell_conflict{
     int num_pedestrians;
@@ -29,16 +30,15 @@ typedef struct cell_conflict{
     int pedestrian_allowed;
 }cell_conflict;
 
-Pedestrian_Set pedestrian_set = {NULL,0};
+Pedestrian_Set pedestrian_set = {NULL,0,0};
 
 static Pedestrian create_pedestrian(Location ped_coordinates);
-void calculate_transition_probabilities(Pedestrian current_pedestrian);
-Location transition_selection(Pedestrian current_pedestrian);
-static bool are_pedestrian_paths_crossing(Pedestrian first_pedestrian, Pedestrian second_pedestrian);
-static Function_Status calculate_reduced_line_equation(Location origin, Location target, reduced_line_equation* line);
-static void calculate_intersection_point(reduced_line_equation first_line, reduced_line_equation second_line, double *x, double *y);
-static bool is_intersection_within_pedestrian_movement(double x_coordinate, double y_coordinate, Pedestrian pedestrian);
-static void solve_X_movement(Pedestrian first_pedestrian, Pedestrian second_pedestrian);
+static void calculate_transition_probabilities(Pedestrian current_pedestrian);
+static Location transition_selection(Pedestrian current_pedestrian);
+static Location calculate_inertia_mask(Location previous, Location current);
+static bool evaluate_pedestrian_vision(Pedestrian current_pedestrian);
+static bool is_vision_blocked(Location origin, Location destination);
+static bool is_pedestrian_dead(Pedestrian current_pedestrian);
 
 /**
  * Inserts a specified number of pedestrians at random locations within the environment.
@@ -164,6 +164,12 @@ void evaluate_pedestrians_movements()
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
 
+        if(is_pedestrian_dead(current_pedestrian))
+        {
+            current_pedestrian->state = DEAD;
+            pedestrian_set.num_dead_pedestrians++;
+        }
+
         if(current_pedestrian->state != MOVING)
             continue;
 
@@ -272,14 +278,19 @@ Function_Status solve_pedestrian_conflicts(Cell_Conflict pedestrian_conflicts, i
         return FAILURE;
     }
 
+    int random_result;
     for(int conflict_index = 0; conflict_index < num_conflicts; conflict_index++)
     {
         Cell_Conflict current_conflict = &(pedestrian_conflicts[conflict_index]);
 
-        int random_result = roulette_wheel_selection((double *) &probabilities, current_conflict->num_pedestrians,   
-                                                    current_conflict->num_pedestrians);
+        if(probability_test(cli_args.mu)) // The movement to all pedestrian in the conflict has been denied
+            random_result = -1; // Since random_result has been assigned as -1, all pedestrian will have their states changed to STOPPED.
+        else
+        {
+            random_result = roulette_wheel_selection((double *) &probabilities, current_conflict->num_pedestrians,   current_conflict->num_pedestrians);
+        }
 
-        current_conflict->pedestrian_allowed = current_conflict->pedestrian_ids[random_result];
+        current_conflict->pedestrian_allowed = random_result == -1 ? -1 : current_conflict->pedestrian_ids[random_result];
         for(int p_index = 0; p_index < current_conflict->num_pedestrians; p_index++)
         {
             int pedestrian_id = current_conflict->pedestrian_ids[p_index] - 1;
@@ -317,57 +328,6 @@ void print_pedestrian_conflict_information(Cell_Conflict pedestrian_conflicts, i
 
 }
 
-
-/**
- * Scans the pedestrian_position_grid to find adjacent pedestrians where their movement path cross (X movement) and resolves the conflict by allowing only one pedestrian to move.
- */
-void block_X_movement()
-{
-    bool is_X_movement;
-
-    //Except for the exits, there are no pedestrians at the boundaries of the environment, so no checks are performed there.
-    for(int i = 1; i < cli_args.global_line_number - 1; i++) 
-    {
-        for(int h = 1; h < cli_args.global_column_number - 1; h++)
-        {
-            int first_pedestrian_id = pedestrian_position_grid[i][h];
-            if(first_pedestrian_id > 0) // there is a pedestrian on the cell
-            {
-                if(pedestrian_set.list[first_pedestrian_id - 1]->state != MOVING)
-                    continue;
-
-                // X movements only occur between pedestrians located in vertically or horizontally adjacent cells,
-                // so only those cells need to be verified. Due to the scanning method, the [i-1][h] and [i][h-1] cells
-                // have already been checked for X movements (or did not require any check), so only the cells located
-                // at [i][h+1] and [i+1][h] need to be verified.        
-
-                int second_pedestrian_id = pedestrian_position_grid[i][h + 1];
-                if(second_pedestrian_id > 0)  // there is a pedestrian on the cell
-                {
-                    is_X_movement = are_pedestrian_paths_crossing(pedestrian_set.list[first_pedestrian_id- 1], pedestrian_set.list[second_pedestrian_id - 1]);
-
-                    if(is_X_movement == true)
-                    {
-                        solve_X_movement(pedestrian_set.list[first_pedestrian_id- 1], pedestrian_set.list[second_pedestrian_id - 1]);
-                        continue;
-                    }
-
-                }
-
-                second_pedestrian_id = pedestrian_position_grid[i + 1][h];
-                if(second_pedestrian_id > 0) // there is a pedestrian on the cell
-                {
-                    is_X_movement = are_pedestrian_paths_crossing(pedestrian_set.list[first_pedestrian_id- 1], pedestrian_set.list[second_pedestrian_id - 1]);
-
-                    if(is_X_movement == true)
-                        solve_X_movement(pedestrian_set.list[first_pedestrian_id- 1], pedestrian_set.list[second_pedestrian_id - 1]);
-
-                }
-            }
-        }
-    }    
-}
-
 /**
  *  Pedestrians in MOVING state are moved to their target location (the target Location is copied to the current Location). Upon reaching an exit, their state changes to LEAVING; those already in an exit transition to GOT_OUT. This is how the movement of a pedestrian is done.
  * 
@@ -379,27 +339,13 @@ void apply_pedestrian_movement()
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
-
-        if(current_pedestrian->state != GOT_OUT && !cli_args.velocity_density_field)
-            increase_particle_at(current_pedestrian->current); // When the dynamic field is defined as a particle density field, increases the particle count for all cells occupied by pedestrians (not only for those which the pedestrian is moving away).
         
-        if(current_pedestrian->state == GOT_OUT || current_pedestrian->state == STOPPED)
+        if(current_pedestrian->state == GOT_OUT || current_pedestrian->state == STOPPED || current_pedestrian->state == DEAD)
             continue; // Pedestrian is ignored
 
         if(current_pedestrian->state == MOVING)
         {
-            if(! are_same_coordinates(current_pedestrian->current, current_pedestrian->target))
-            {
-                // In case the pedestrian didn't move, the previous cell is preserved (since it isn't updated).
-                // This guarantees the pedestrian will not get confused with its own trace.
-
-                current_pedestrian->previous = current_pedestrian->current;
-
-                // When the dynamic field has been defined as a particle density field, the increase in the cell particles happens only in the beginning of each timestep, considering the current location of each pedestrian and not when (if) they move.
-                if(cli_args.velocity_density_field)
-                    increase_particle_at(current_pedestrian->current);
-            }
-
+            current_pedestrian->previous = current_pedestrian->current;
             current_pedestrian->current = current_pedestrian->target;
 
             if(exits_only_grid[current_pedestrian->current.lin][current_pedestrian->current.col] == EXIT_CELL)
@@ -410,24 +356,21 @@ void apply_pedestrian_movement()
         }
         else if(current_pedestrian->state == LEAVING)
         {
-            if(cli_args.velocity_density_field)
-                increase_particle_at(current_pedestrian->current);
-
             current_pedestrian->state = GOT_OUT; // After a timestep in the exit the pedestrian is removed from the environment.
         }
     }
 }
 
 /**
- * Verifies if all pedestrians have exited the environment.
- * @return bool, where True indicates that the environment is empty (no pedestrians) and False otherwise.
+ * Verifies if all alive pedestrians have exited.
+ * @return bool, where True indicates that the environment is empty (no alive pedestrians) and False otherwise.
 */
 bool is_environment_empty()
 {
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
-        if(current_pedestrian->state != GOT_OUT)
+        if(current_pedestrian->state != GOT_OUT && current_pedestrian->state != DEAD)
             return false;
     }
 
@@ -445,7 +388,7 @@ void update_pedestrian_position_grid()
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
 
-        if(current_pedestrian->state == GOT_OUT)
+        if(current_pedestrian->state == GOT_OUT || current_pedestrian->state == DEAD)
             continue;
 
         pedestrian_position_grid[current_pedestrian->current.lin][current_pedestrian->current.col] = current_pedestrian->id;
@@ -454,14 +397,16 @@ void update_pedestrian_position_grid()
 }
 
 /**
- * Reset the state of all pedestrians to MOVING, except for those in the states GOT_OUT and LEAVING.
+ * Reset the state of all pedestrians to MOVING, except for those in the states GOT_OUT, LEAVING or DEAD.
 */
 void reset_pedestrian_state()
 {
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
-        if(pedestrian_set.list[p_index]->state != GOT_OUT && pedestrian_set.list[p_index]->state != LEAVING)
-            pedestrian_set.list[p_index]->state = MOVING;
+        Pedestrian current_pedestrian = pedestrian_set.list[p_index];
+
+        if(current_pedestrian->state != GOT_OUT && current_pedestrian->state != LEAVING && current_pedestrian->state != DEAD)
+            current_pedestrian->state = MOVING;
     }
 }
 
@@ -516,61 +461,76 @@ static Pedestrian create_pedestrian(Location ped_coordinates)
  * 
  * @param current_pedestrian Pedestrian for which the transition probabilities will be calculated.
  */
-void calculate_transition_probabilities(Pedestrian current_pedestrian)
+static void calculate_transition_probabilities(Pedestrian current_pedestrian)
 {
-    int lin = current_pedestrian->current.lin;
-    int col = current_pedestrian->current.col;
+    double alpha = 1;
 
     double normalization_value = 0; // The N value in the formula
+
+    Double_Grid static_field = evaluate_pedestrian_vision(current_pedestrian) ? exits_set.aux_static_grid : exits_set.static_floor_field;
+    // Necessário calcular uma grid de distâncias
+    // Ou calcular apenas as distancias das celulas na vizinhança
 
     for(int i = 0; i < 3; i++)
     {
         for(int j = 0; j < 3; j++)
         {
-            if(i == 1 || j == 1) // Ignore the diagonals, since they are all 0.
+            if(i != 1 && j != 1) // Ignore the diagonals, since all their probabilities is 0.
+                continue;
+
+            int lin = current_pedestrian->current.lin + i - 1;
+            int col = current_pedestrian->current.col + j - 1;
+
+            if(! is_within_grid_lines(lin) || 
+                ! is_within_grid_columns(col) ||
+                is_cell_with_fire((Location) {lin, col}) ||
+                static_field[lin][col] == IMPASSABLE_OBJECT ||
+                risky_cells_grid[lin][col] == DANGER_CELL) 
             {
-                if(! is_within_grid_lines(lin + (i - 1)) || 
-                   ! is_within_grid_columns(col + (j - 1)))
-                {
-                    current_pedestrian->probabilities[i][j] = 0;
-                    continue;
-                }
+                // Verifying fire and obstacles before performing any part of the calculation helps avoid unnecessary computations.
+                current_pedestrian->probabilities[i][j] = 0;
 
-                int dynamic_floor_field_value = exits_set.dynamic_floor_field[lin + i - 1][col + j - 1];
-
-                if(cli_args.ignore_latest_self_trace)
-                {
-                    if(! are_same_coordinates(current_pedestrian->origin, current_pedestrian->previous))
-                    {
-                        // Guarantees that the pedestrian has already moved from its original position.
-
-                        if(are_same_coordinates(current_pedestrian->previous, (Location) {lin + (i - 1), col + (j - 1)}))
-                        {
-                            // The cell of the neighborhood which the transition probability is being calculated is the cell that the pedestrian was previously located.
-
-                            if(dynamic_floor_field_value > 0)
-                                dynamic_floor_field_value--;
-                        }
-                    }
-                }
-
-                // Static floor field
-                current_pedestrian->probabilities[i][j] = exp(cli_args.ks * exits_set.static_floor_field[lin + i - 1][col + j - 1]);
-                // Dynamic floor field
-                current_pedestrian->probabilities[i][j] *= exp(cli_args.kd * dynamic_floor_field_value); 
-
-                if(! (i == 1 && j == 1)) // Ignores when is the pedestrian's cell.
-                    current_pedestrian->probabilities[i][j] *= 1 - (pedestrian_position_grid[lin + i - 1][col + j - 1] > 0 ? 1 : 0); // Multiply by 0 if cell is occupied
-                
-                current_pedestrian->probabilities[i][j] *= exits_set.static_floor_field[lin + i - 1][col + j - 1] == IMPASSABLE_OBJECT ? 0 : 1; // Multiply by 0 if cell has an obstacle.
-            
-                normalization_value += current_pedestrian->probabilities[i][j];
+                continue;
             }
 
+            // Static floor field
+            current_pedestrian->probabilities[i][j] = exp(cli_args.ks * static_field[lin][col]);
+
+            // Dynamic floor field
+            current_pedestrian->probabilities[i][j] *= exp(cli_args.kd * exits_set.dynamic_floor_field[lin][col]); 
+
+            // Fire floor field
+            if(risky_cells_grid[lin][col] == NON_RISKY_CELLS) // If its a risky cell (danger cells have already been verified out) the pedestrian ignores the influence of the fire and this code isn't run.
+            {
+                if(exits_set.distance_to_exits_grid[lin][col] < cli_args.risk_distance)
+                    alpha = cli_args.fire_alpha;
+                else
+                    alpha = 1;
+
+                current_pedestrian->probabilities[i][j] /= exp(cli_args.kf * alpha * exits_set.fire_floor_field[i][j]);
+            }
+
+            if(! (i == 1 && j == 1)) // Ignores when it is the pedestrian's cell.
+                current_pedestrian->probabilities[i][j] *= pedestrian_position_grid[lin][col] > 0 ? 0 : 1; // Multiply by 0 if cell is occupied
+
+            normalization_value += current_pedestrian->probabilities[i][j];  
         }
     }
 
-    normalization_value = pow(normalization_value, -1);
+    if( !are_same_coordinates(current_pedestrian->previous, current_pedestrian->current))
+    {
+        // If the pedestrian has moved on the previous timestep
+        Location inertia_mask = calculate_inertia_mask(current_pedestrian->previous, current_pedestrian->current);
+        double former_probability = current_pedestrian->probabilities[inertia_mask.lin + 1][inertia_mask.col + 1];
+
+        current_pedestrian->probabilities[inertia_mask.lin + 1][inertia_mask.col + 1] *= cli_args.omega;
+        // If the correspondent cell is occupied by anything, omega will have no effect (since is a multiplication with 0).
+
+        normalization_value += current_pedestrian->probabilities[inertia_mask.lin + 1][inertia_mask.col + 1] - former_probability;
+    }
+
+    if(! normalization_value == 0) // Avoids 0 to the power of -1.
+        normalization_value = pow(normalization_value, -1);
 
     for(int i = 0; i < 3; i++)
     {
@@ -578,6 +538,20 @@ void calculate_transition_probabilities(Pedestrian current_pedestrian)
         {
             current_pedestrian->probabilities[i][j] *= normalization_value;
         }
+    }
+
+    if(current_pedestrian->id == 8)
+    {
+        printf("%d %d\n", current_pedestrian->current.lin, current_pedestrian->current.col);
+        for(int i = 0; i < 3; i++)
+        {
+            for(int j = 0; j < 3; j++)
+            {
+                printf("%.3lf ", current_pedestrian->probabilities[i][j]);
+            }
+            printf("\n");
+        }
+        fflush(stdout);
     }
 }
 
@@ -590,7 +564,7 @@ void calculate_transition_probabilities(Pedestrian current_pedestrian)
  * 
  * @return The coordinates of the selected destination cell.
  */
-Location transition_selection(Pedestrian current_pedestrian)
+static Location transition_selection(Pedestrian current_pedestrian)
 {
     float draw_value = 0;
     draw_value = rand_within_limits(0,1);
@@ -612,140 +586,173 @@ Location transition_selection(Pedestrian current_pedestrian)
         }
     }
 
-    return current_coordinates; // If no cell is selected due to rounding errors, the probability corresponding to the pedestrian's current cell will be chosen.
+    // If no cell is selected due to rounding errors or all probabilities being zero, the pedestrian will stay in the current cell.
+    return current_coordinates; 
 }
 
+/**
+ * Calculates the inertia mask for the given locations. An inertia mask is a location modifier that, when added to the coordinates of the current location, yields the coordinates of the next cell along the same path of movement from the previous to the current location.
+ * 
+ * @param previous The former cell coordinates
+ * @param current The current cell coordinates
+ * 
+ * @note Works for movements in the diagonals.
+ * 
+ * @return A location, containing the calculated inertia mask.
+ */
+static Location calculate_inertia_mask(Location previous, Location current)
+{
+    return (Location) {current.lin - previous.lin, current.col - previous.col};
+}
 
 /**
- * Verifies if the paths of the provided pedestrians cross using the reduced straight line formula and intersection of lines.
+ * Verify if the given pedestrian has the vision of any non-blocked exit cell obstructed. If true, a static floor field without the affected exit cells is calculated and stored in the aux_static_grid.
  * 
- * @param first_pedestrian A Pedestrian.
- * @param second_pedestrian A Pedestrian adjacent to the first_pedestrian.
- * @return bool, where True indicates that the paths cross and False otherwise.
-*/
-static bool are_pedestrian_paths_crossing(Pedestrian first_pedestrian, Pedestrian second_pedestrian)
+ * @param current_pedestrian The pedestrian whose vision will be evaluated.
+ * @return A bool, indicating if the pedestrian's view of any exit cell is obstructed (true) or not (false).
+ */
+static bool evaluate_pedestrian_vision(Pedestrian current_pedestrian)
 {
-    if(first_pedestrian->state != MOVING || second_pedestrian->state != MOVING)
-        return false;
+    Location current_loc = current_pedestrian->current;
+    Location *exit_cell_coordinates = NULL;
+    int num_exit_cells = 0;
 
-    reduced_line_equation first_line, second_line;
-    // Each straight line struct represents the line containing the segment from the initial to the target location of each pedestrian.
+    bool vision_blocked = false; // Indicates whether the pedestrian's view of ANY exit is obstructed.
 
-    if(calculate_reduced_line_equation(first_pedestrian->current, first_pedestrian->target, &first_line) == FAILURE ||
-       calculate_reduced_line_equation(second_pedestrian->current, second_pedestrian->target, &second_line) == FAILURE)
-        return false; //Vertical lines doesn't allow the occurrence of X movement.
+    for(int exit_index = 0; exit_index < exits_set.num_exits; exit_index++) 
+    {
+        Exit current_exit = exits_set.list[exit_index];
 
-    if(first_line.angular_coefficient == 0.0 || second_line.angular_coefficient == 0.0)
-        return false; // angular_coefficient equals zero results in a horizontal line, where X movements cannot occur.
+        if(current_exit->is_blocked_by_fire)
+            continue;
 
-    if(first_line.angular_coefficient == second_line.angular_coefficient)
-        return false; // Lines are equal or parallel, and therefore X movements cannot occur.
+        for(int cell_index = 0; cell_index < current_exit->width; cell_index++)
+        {
+            Location current_cell = current_exit->coordinates[cell_index];
 
-    double intersect_x, intersect_y;
+            if(is_vision_blocked(current_loc, current_cell))
+            {
+                vision_blocked = true;
+                continue;
+            }
+            
+            exit_cell_coordinates = realloc(exit_cell_coordinates, sizeof(Location) * (num_exit_cells + 1));
+            if(exit_cell_coordinates == NULL)
+            {
+                fprintf(stderr, "Failure in the realloc of the exit_cells_coordinates list (evaluate_pedestrian_vision).\n");
+                return NULL;
+            }
 
-    calculate_intersection_point(first_line, second_line, &intersect_x, &intersect_y);    
+            exit_cell_coordinates[num_exit_cells] = current_cell;
+            num_exit_cells++;
+        }
+    }
 
-    // .lin corresponds to the y-axis and .col corresponds to the x-axis.
+    calculate_zheng_static_field(exit_cell_coordinates, num_exit_cells, exits_set.aux_static_grid);
 
-    if(first_pedestrian->target.col == intersect_x && first_pedestrian->target.lin == intersect_y)       
-        return false; // The intersect point coincides with the target cell coordinates of one pedestrian. This means that both aim to move to the same cell and this characterizes a simples conflict. These conflicts are solved elsewhere. 
+    free(exit_cell_coordinates);
+
+    return vision_blocked;
+}
+
+/**
+ * Verifies if the pedestrian in the origin location doesn't have a clean vision of the exit at destination.
+ * 
+ * @note Utilizes the Bresenham Line Algorithm.
+ * 
+ * @param origin The Location of the pedestrian.
+ * @param destination The location of the exit.
+ * 
+ * @return bool, where True indicates that the pedestrian doesn't have a clean vision of the exit, or False if he does see the exit.
+ */
+static bool is_vision_blocked(Location origin, Location destination)
+{
+    // Sugestão: Pedestre verificar a célula na frente da porta, invés da porta
+
+    int x1 = origin.col, y1 = origin.lin;
+    int x2 = destination.col, y2 = destination.lin; // Just to facilitate the operations
+
+    int dx = x2 - x1; // The difference in the x axis. 
+    int dy = y2 - y1; // The difference in the y axis.
+
+    int error; // Also know as the decision variable
+
+    int x_step = 1; // The direction the algorithm will step in the x-axis
+                    // 1: --> , -1: <--
+    int y_step = 1; // The direction the algorithm will step in the y-axis
+                    // 1: down-top, -1: top-down
+
+    int y = y1, x = x1; // The coordinates used to iterate through the line
     
-    if(is_intersection_within_pedestrian_movement(intersect_x, intersect_y, first_pedestrian) == true &&
-       is_intersection_within_pedestrian_movement(intersect_x, intersect_y, second_pedestrian) == true)
-        return true; // A X movement happens
+    if(is_cell_with_fire((Location) {y1, x1}))
+        return true;
+
+    if(dy < 0)
+    {
+        y_step = -1; // top-down
+        dy = -dy;
+    }
+    
+    if(dx < 0)
+    {
+        x_step = -1; // <--
+        dx = -dx;
+    }
+
+    int ddx = 2 * dx;
+    int ddy = 2 * dy; // Both used to update the error variable
+    if(ddx >= ddy) //The algorithm uses the x-axis as the main direction
+    {
+        error = ddy - dx;
+
+        for(int i = 0; i < dx; i++)
+        {
+            x += x_step; // This forces the algorithm to start at the second point
+
+            if(error >  0)
+            {
+                y += y_step;
+                error -= ddx;
+            }
+            error += ddy;
+
+            if(is_cell_with_fire((Location) {y, x}))
+                return true;
+        }
+    }
+    else // The algorithm uses the y-axis as the main direction
+    {
+        error = ddx - dy;
+
+        for(int i = 0; i < dy; i++)
+        {
+            y += y_step;
+
+            if(error > 0)
+            {
+                x += x_step;
+                error -= ddy;
+            }
+            error += ddx;
+
+            if(is_cell_with_fire((Location) {y, x}))
+                return true;
+        }
+    }
 
     return false;
 }
 
 /**
- * Calculate the reduced line equation (slope-intercept form) for the line segment beginning at origin and ending at target.
+ * Verify if the given pedestrian is dead (it is on a cell with fire).
  * 
- * @param origin Coordinates of the origin point of the segment.
- * @param target Coordinates of the target (end) point of the segment.
- * @param line A pointer to a reduced_line_equation struct where the calculated values will be stored.
- * @return Function_Status: FAILURE (0), for vertical lines, or SUCCESS (1).
-*/
-static Function_Status calculate_reduced_line_equation(Location origin, Location target, reduced_line_equation* line)
+ * @param current_pedestrian Pedestrian for which the verification will be performed.
+ * 
+ * @return bool, where True indicates that the pedestrian is dead, or False otherwise.
+ */
+static bool is_pedestrian_dead(Pedestrian current_pedestrian)
 {
-    // .lin corresponds to the y-axis and .col corresponds to the x-axis.
+    Location current_location = current_pedestrian->current;
 
-    if(target.col == origin.col)
-        return FAILURE;
-        // Infinite angular coefficient (denominator equals zero: xf - xi). This results in a vertical line that cannot be represented in the reduced form. 
-
-    // angular_coefficient = (yf - yi) / (xf - xi)
-    line->angular_coefficient = (target.lin - origin.lin) / (target.col - origin.col);
-     
-    // linear_coefficient = yi - m * xi
-    line->linear_coefficient = origin.lin - line->angular_coefficient * origin.col;
-
-    return SUCCESS;
-}
-
-/**
- * Calculate the x and y coordinates of the intersection point of the provided lines.
- * 
- * @note If the provided lines are parallel, both x and y will be set to zero.
- * 
- * @param first_line A straight line represented in the slope-intercept form.
- * @param second_line A straight line represented in the slope-intercept form.
- * @param x A pointer to a double, where the calculated interception point x will be stored.
- * @param y A pointer to a double, where the calculated interception point y will be stored.
-*/
-static void calculate_intersection_point(reduced_line_equation first_line, reduced_line_equation second_line, double *x, double *y)
-{
-    /*
-        (1): y = m1 * x + n1
-        (2): y = m2 * x + n2
-
-        m1 * x + n1 = m2 * x + n2 --> m1*x - m2*x = n2 - n1 --> x(m1 - m2) = n2 - n1
-        x = (n2 - n1) / (m1 - m2) --> Expression to calculate the x-axis intersection point.
-                                      With the x-axis point calculated, its possible to derive the y-axis intersection point.
-    */
-
-    if(first_line.angular_coefficient == second_line.angular_coefficient)
-    {
-        *x = *y = 0;
-        return;
-    }
-
-    *x = (second_line.linear_coefficient - first_line.linear_coefficient) / 
-        (first_line.angular_coefficient - second_line.angular_coefficient);
-    *y = first_line.angular_coefficient * (*x) + first_line.linear_coefficient;
-}
-
-/**
- * Verifies if the point (x_coordinate, y_coordinate) is within a the line segment defined by the current and target locations of the given pedestrian.
- * 
- * @param x_coordinate A double, representing the x-axis coordinate.
- * @param y_coordinate A double, representing the y-axis coordinate.
- * @param first_pedestrian A Pedestrian.
- * @return bool, where True indicates that the point is within the line segment.
-*/
-static bool is_intersection_within_pedestrian_movement(double x_coordinate, double y_coordinate, Pedestrian pedestrian)
-{
-    return  x_coordinate > fmin(pedestrian->current.col, pedestrian->target.col) && 
-            x_coordinate < fmax(pedestrian->current.col, pedestrian->target.col) && 
-            y_coordinate > fmin(pedestrian->current.lin, pedestrian->target.lin) && 
-            y_coordinate < fmax(pedestrian->current.lin, pedestrian->target.lin);
-}
-
-/**
- * Decides which of the given pedestrians will be allowed to move.
- * 
- * @param first_pedestrian A Pedestrian involved in a X movement.
- * @param second_pedestrian A pedestrian involved in an X movement.
-*/
-static void solve_X_movement(Pedestrian first_pedestrian, Pedestrian second_pedestrian)
-{
-    double sorted_value = rand_within_limits(0,1);
-    
-    if(sorted_value <= 0.5 + TOLERANCE)
-        second_pedestrian->state = STOPPED;
-    else
-        first_pedestrian->state = STOPPED;
-
-    if(cli_args.show_debug_information)
-        printf("X Movement between %d and %d --> %d.\n", first_pedestrian->id, second_pedestrian->id, 
-                                                         sorted_value < 0.5 + TOLERANCE? first_pedestrian->id : second_pedestrian->id);
+    return fire_grid[current_location.lin][current_location.col] == FIRE_CELL;
 }

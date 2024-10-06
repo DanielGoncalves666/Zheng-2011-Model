@@ -55,18 +55,23 @@ const char doc[] = "zheng - Simulates pedestrian evacuation using the Zheng (201
 #define OPT_SIMULATION_SET_INFO 1003
 #define OPT_IMMEDIATE_EXIT 1004
 #define OPT_AVOID_CORNER_MOVEMENT 1006
-#define OPT_ALLOW_X_MOVEMENT 1007
+// allow_x_movement removed
 #define OPT_SINGLE_EXIT_FLAG 1008
 #define OPT_PEDESTRIAN_DENSITY 1009
 #define OPT_ALPHA 1010
 #define OPT_DELTA 1011
 #define OPT_STATIC_COUPLING 1012
 #define OPT_DYNAMIC_COUPLING 1013
+#define OPT_FIRE_COUPLING 1014
+#define OPT_RISK_DISTANCE 1015
+#define OPT_FIRE_ALPHA 1016
+#define OPT_FIRE_GAMMA 1017
+#define OPT_OMEGA 1018
+#define OPT_MU 1019
+#define OPT_FIRE_SPREAD_RATE 1020
 #define OPT_MIN_SIMULATION_VALUE 2000
 #define OPT_MAX_SIMULATION_VALUE 2001
 #define OPT_STEP_VALUE 2002
-#define OPT_DYN_FIELD_DEFINITION 2003
-#define OPT_IGNORE_SELF_TRACE 2004
 
 struct argp_option options[] = {
     {"\nFiles:\n",0,0,OPTION_DOC,0,1},
@@ -91,7 +96,6 @@ struct argp_option options[] = {
     {"ped", 'p', "PEDESTRIANS", 0, "Manually set the number of pedestrians to be randomly placed in the environment. If provided takes precedence over --density.",10},
     {"immediate-exit", OPT_IMMEDIATE_EXIT, 0,0, "The pedestrians will exit the environment the moment they reach an exit, instead of waiting a timestep in the LEAVING state."},
     {"avoid-corner-movement",OPT_AVOID_CORNER_MOVEMENT,0,0, "Prevents movement in the corners of walls and obstacles. A single diagonal movement through the corner of a obstacle becomes three movements."},
-    {"allow-x-movement",OPT_ALLOW_X_MOVEMENT,0,0, "The movement of pedestrians isn't restricted when X movements occur."},
 
     {"\nKirchner model constants and options:\n",0,0,OPTION_DOC,0, 11},
     {"density", OPT_PEDESTRIAN_DENSITY, "DENSITY", 0, "The percentage of unoccupied cells in the environment that should be filled by pedestrians. Defaults to 0.3.",12},
@@ -99,20 +103,27 @@ struct argp_option options[] = {
     {"delta", OPT_DELTA, "DELTA", 0, "The probability that a particle in the dynamic floor field will decay. Value must be between 0 and 1, both inclusive. Defaults to 0.5."},
     {"ks", OPT_STATIC_COUPLING, "KS", 0, "The static field coupling constant that determines the strength of the static floor field when calculating the transition probabilities for pedestrians. Must be non-negative. Defaults to 0.5. Defaults to 1."},
     {"kd", OPT_DYNAMIC_COUPLING, "KD", 0, "The dynamic field coupling constant that determines the strength of the dynamic floor field when calculating the transition probabilities for pedestrians. Must be non-negative. Defaults to 0.5. Defaults to 1."},
-    {"dyn-definition", OPT_DYN_FIELD_DEFINITION, "DYN", 0, "Determines how the dynamic floor field is defined, either as a virtual velocity density field or a particle density field."},
-    {"ignore-self-trace", OPT_IGNORE_SELF_TRACE, 0, 0, "When calculating transition probabilities for a pedestrian, ignores the most recent particle deposited by that pedestrian."},
     
-    {"\nRange values for simulation focused on a constant:\n",0,0,OPTION_DOC,0, 13},
-    {"min", OPT_MIN_SIMULATION_VALUE, "MIN", 0, "The minimum value that the variable constant will assume. Defaults to 0.", 14},
+    {"\nZheng model constants and options:\n",0,0,OPTION_DOC,0, 13},
+    {"kf", OPT_FIRE_COUPLING, "KF", 0, "The fire field coupling constant is one of the parameters used to adjust the strength of the fire floor field. Defaults to 1.", 14},
+    {"risk-distance", OPT_RISK_DISTANCE, "RISK", 0, "The maximum distance (exclusive) within which a pedestrian near an exit is willing to take more risks to attempt to leave the environment. In fact, what happens is that the second parameter used to adjust the strength of the fire floor field will be FIRE-ALPHA. Defaults to 6."},
+    {"fire-alpha", OPT_FIRE_ALPHA, "FIRE-ALPHA", 0, "The value of the second parameter to adjust the strength of the fire floor field. If a pedestrian is closer than RISK, then this value is used in the calculation of the transition probabilities (instead of 1). This has the effect that the pedestrians are more willing to pass closer to a fire if that means they can exit the environment. Defaults to 0.5."},
+    {"fire-gamma", OPT_FIRE_GAMMA, "FIRE_GAMMA", 0, "A constant used in the calculation of the fire floor field. If the distance from a cell to a cell with fire is greater than FIRE_GAMMA, the fire floor field (FF) value of that cell will be 0. Otherwise, the value will be equal to or greater than 0. The default value of FIRE_GAMMA is 8."},
+    {"omega", OPT_OMEGA, "OMEGA", 0, "In the Zheng paper, pedestrians try to maintain their preferred direction and velocity. The constant Omega increases the probability that a pedestrian will move to cells aligned with their preferred direction. Must be a value greater or equal to 1. Defaults to 1."},
+    {"mu", OPT_MU, "MU", 0, "The probability that, in a conflict where multiple pedestrians attempt to move to the same cell, no one will successfully move. Value must be between 0 and 1, both inclusive. Defaults to 0.1."},
+    {"spread-rate", OPT_FIRE_SPREAD_RATE, "RATE", 0, "The velocity, in meters per second, that the fire spreads in the environment. Defaults to 0.1 m/s."},
+    
+    {"\nRange values for simulation focused on a constant:\n",0,0,OPTION_DOC,0, 15},
+    {"min", OPT_MIN_SIMULATION_VALUE, "MIN", 0, "The minimum value that the variable constant will assume. Defaults to 0.", 16},
     {"max", OPT_MAX_SIMULATION_VALUE, "MAX", 0, "The maximum value that the variable constant will assume. Defaults to 1."},
     {"step", OPT_STEP_VALUE, "STEP", 0, "The step value for incrementing the variable constant. Defaults to 0.01"},
 
-    {"\nToggle Options (optional):\n",0,0,OPTION_DOC,0, 15},
-    {"debug", OPT_DEBUG, 0,0 , "Prints debug information to stdout.",16},
+    {"\nToggle Options (optional):\n",0,0,OPTION_DOC,0, 17},
+    {"debug", OPT_DEBUG, 0,0 , "Prints debug information to stdout.",18},
     {"simulation-set-info", OPT_SIMULATION_SET_INFO, 0, 0, "Prints simulation set information (exits coordinates) to the output file."},
     {"single-exit-flag", OPT_SINGLE_EXIT_FLAG, 0,0, "Prints a flag (#1) before the results for every simulation set that has only one exit."},
 
-    {"\nAdditional Information:\n",0,0,OPTION_DOC,0,17},
+    {"\nAdditional Information:\n",0,0,OPTION_DOC,0,19},
     {0}
 };
 
@@ -131,11 +142,9 @@ Command_Line_Args cli_args = {
     .show_simulation_set_info=false,
     .immediate_exit=false,
     .prevent_corner_crossing=false,
-    .allow_X_movement = false,
     .single_exit_flag = false,
     .use_density = true,
-    .velocity_density_field = true,
-    .ignore_latest_self_trace = false,
+    .fire_is_present = false,
     .global_line_number = 0,
     .global_column_number = 0,
     .num_simulations = 1, // A single simulation by default.
@@ -143,13 +152,20 @@ Command_Line_Args cli_args = {
     .seed = 0,
     .diagonal = 1.5,
     .alpha=0.5,
+    .fire_alpha=0.5,
+    .fire_gamma=8,
+    .omega=1,
+    .mu=0.1,
     .delta=0.5,
+    .risk_distance=6,
     .ks=1,
     .kd=1,
+    .kf=1,
     .density=0.3,
     .min=0,
     .max=1,
-    .step=0.01
+    .step=0.01,
+    .spread_rate=0.1
 };
 // When loading an environment global_line_number and global_column_number will no be obtained from the command line arguments. Besides, total_num_pedestrians will be automatic determined by the program on some environment origin formats.
 
@@ -274,9 +290,6 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
         case OPT_AVOID_CORNER_MOVEMENT:
             cli_args->prevent_corner_crossing = true;
             break;
-        case OPT_ALLOW_X_MOVEMENT:
-            cli_args->allow_X_movement = true;
-            break;
         case OPT_SINGLE_EXIT_FLAG:
             cli_args->single_exit_flag = true;
             break;
@@ -350,6 +363,65 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
             }
 
             break;
+        case OPT_FIRE_COUPLING:
+            cli_args->kf = atof(arg);
+
+            if(cli_args->kf < 0)
+            {
+                fprintf(stderr, "The fire coupling constant must be a non-negative number.\n");
+                return EIO;
+            }
+
+            break;
+        case OPT_FIRE_ALPHA:
+            cli_args->fire_alpha = atof(arg);
+            
+            if(cli_args->fire_alpha < 0 || cli_args->fire_alpha > 1)
+            {
+                fprintf(stderr, "The fire alpha constant must be in the [0,1] range.\n");
+                return EIO;
+            }
+            break;
+        case OPT_RISK_DISTANCE:
+            cli_args->risk_distance = atof(arg);
+
+            if(cli_args->risk_distance < 0)
+            {
+                fprintf(stderr, "The risk distance must be a non-negative number.\n");
+                return EIO;
+            }
+
+            break;
+        case OPT_FIRE_GAMMA:
+            cli_args->fire_gamma = atof(arg);
+
+            if(cli_args->fire_gamma < 0)
+            {
+                fprintf(stderr, "The fire gamma constant must be a non-negative number.\n");
+                return EIO;
+            }
+            
+            break;
+        case OPT_OMEGA:
+            cli_args->omega = atof(arg);
+
+            if(cli_args->omega < 1)
+            {
+                fprintf(stderr, "The omega constant can't be a value lower than 1.\n");
+                return EIO;
+            }
+
+            break;
+        case OPT_MU:
+            cli_args->mu = atof(arg);
+            
+            if(cli_args->mu < 0 || cli_args->mu > 1)
+            {
+                fprintf(stderr, "The mu constant must be in the [0,1] range.\n");
+                return EIO;
+            }
+
+            break;
         case OPT_MIN_SIMULATION_VALUE:
             cli_args->min = atof(arg);
             break;
@@ -364,20 +436,13 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
                 return EIO;
             }
             break;
-        case OPT_DYN_FIELD_DEFINITION:
-            int dyn_definition = atoi(arg);
-            if(dyn_definition != 1 && dyn_definition != 2)
-            {
-                fprintf(stderr, "The dynamic floor field definition provided is invalid.\n");
+        case OPT_FIRE_SPREAD_RATE:
+            cli_args->spread_rate = atof(arg);
+            if(cli_args->spread_rate < 0)
+            {   
+                fprintf(stderr, "The spread rate value must be a non-negative number.\n");
                 return EIO;
             }
-
-            if(dyn_definition == 2)
-                cli_args->velocity_density_field = false;
-            
-            break;
-        case OPT_IGNORE_SELF_TRACE:
-            cli_args->ignore_latest_self_trace = true;
             break;
         case ARGP_KEY_ARG:
             fprintf(stderr, "No positional argument was expect, but %s was given.\n", arg);
@@ -460,14 +525,8 @@ void extract_full_command(char *full_command, int key, char *arg)
         case OPT_AVOID_CORNER_MOVEMENT:
             sprintf(aux, " --avoid-corner-movement");
             break;
-        case OPT_ALLOW_X_MOVEMENT:
-            sprintf(aux, " --allow-x-movement");
-            break;
         case OPT_SINGLE_EXIT_FLAG:
             sprintf(aux, " --single-exit-flag");
-            break;
-        case OPT_IGNORE_SELF_TRACE:
-            sprintf(aux, " --ignore-self-trace");
             break;
         case OPT_SEED:
             sprintf(aux, " --seed=%s", arg);
@@ -490,6 +549,27 @@ void extract_full_command(char *full_command, int key, char *arg)
         case OPT_DYNAMIC_COUPLING:
             sprintf(aux, " --kd=%s", arg);
             break;
+        case OPT_FIRE_COUPLING:
+            sprintf(aux, " --kf=%s", arg);
+            break;
+        case OPT_FIRE_ALPHA:
+            sprintf(aux, " --fire-alpha=%s",arg);
+            break;
+        case OPT_FIRE_GAMMA:
+            sprintf(aux, " --fire-gamma=%s", arg);
+            break;
+        case OPT_OMEGA:
+            sprintf(aux, " --omega=%s", arg);
+            break;
+        case OPT_MU:
+            sprintf(aux, " --mu=%s", arg);
+            break;
+        case OPT_RISK_DISTANCE:
+            sprintf(aux, " --risk-distance=%s",arg);
+            break;
+        case OPT_FIRE_SPREAD_RATE:
+            sprintf(aux, " --spread-rate=%s",arg);
+            break;
         case OPT_MIN_SIMULATION_VALUE:
             sprintf(aux, " --min=%s", arg);
             break;
@@ -498,9 +578,6 @@ void extract_full_command(char *full_command, int key, char *arg)
             break;
         case OPT_STEP_VALUE:
             sprintf(aux, " --step=%s", arg);
-            break;
-        case OPT_DYN_FIELD_DEFINITION:
-            sprintf(aux, " --dyn-definiton=%s", arg);
             break;
         case 'o':
         case 'O':
