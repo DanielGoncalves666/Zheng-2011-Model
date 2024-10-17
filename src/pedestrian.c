@@ -18,9 +18,6 @@
 #include"../headers/shared_resources.h"
 #include"../headers/static_field.h"
 #include"../headers/fire_dynamics.h"
-#include"../headers/fire_field.h"
-
-#include"../headers/printing_utilities.h"
 
 Int_Grid pedestrian_position_grid = NULL; // Grid containing pedestrians at their respective positions.
 
@@ -38,7 +35,8 @@ static Location transition_selection(Pedestrian current_pedestrian);
 static Location calculate_inertia_mask(Location previous, Location current);
 static bool evaluate_pedestrian_vision(Pedestrian current_pedestrian);
 static bool is_vision_blocked(Location origin, Location destination);
-static bool is_pedestrian_dead(Pedestrian current_pedestrian);
+static bool is_pedestrian_on_fire(Pedestrian current_pedestrian);
+static bool force_pedestrian_out_of_fire(Pedestrian current_pedestrian);
 
 /**
  * Inserts a specified number of pedestrians at random locations within the environment.
@@ -164,19 +162,20 @@ void evaluate_pedestrians_movements()
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
 
-        if(is_pedestrian_dead(current_pedestrian))
-        {
-            current_pedestrian->state = DEAD;
-            pedestrian_set.num_dead_pedestrians++;
-        }
-
         if(current_pedestrian->state != MOVING)
             continue;
+        
+        if(is_pedestrian_on_fire(current_pedestrian) && force_pedestrian_out_of_fire(current_pedestrian))
+            continue; // Pedestrian was forced out of a cell with fire.
+  
+        if(current_pedestrian->state == DEAD)
+            continue; // A pedestrian that remained in a cell with fire and just died.
 
         calculate_transition_probabilities(current_pedestrian);
-        Location destination_cell = transition_selection(current_pedestrian);
+        current_pedestrian->target = transition_selection(current_pedestrian);
 
-        current_pedestrian->target = destination_cell;
+        if(are_same_coordinates(current_pedestrian->current,  current_pedestrian->target))
+            current_pedestrian->state = STOPPED; // The pedestrian chose to stay in the same cell (or didn't have any alternative).
     }
 }
 
@@ -340,15 +339,24 @@ void apply_pedestrian_movement()
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
         
-        if(current_pedestrian->state == GOT_OUT || current_pedestrian->state == STOPPED || current_pedestrian->state == DEAD)
+        if(current_pedestrian->state == STOPPED )
+        {
+            current_pedestrian->previous = current_pedestrian->current;
+            continue;
+        }
+
+        if(current_pedestrian->state == GOT_OUT || current_pedestrian->state == DEAD)
             continue; // Pedestrian is ignored
 
         if(current_pedestrian->state == MOVING)
         {
+            increase_particle_at(current_pedestrian->current); 
+
             current_pedestrian->previous = current_pedestrian->current;
             current_pedestrian->current = current_pedestrian->target;
 
-            if(exits_only_grid[current_pedestrian->current.lin][current_pedestrian->current.col] == EXIT_CELL)
+            if(exits_only_grid[current_pedestrian->current.lin][current_pedestrian->current.col] == EXIT_CELL || 
+               exits_only_grid[current_pedestrian->current.lin][current_pedestrian->current.col] == BLOCKED_EXIT_CELL)
             {
                 current_pedestrian->state = cli_args.immediate_exit ? GOT_OUT : LEAVING; 
                 // Leaving means the pedestrian will remain for a timestep before being removed from the environment.
@@ -356,6 +364,7 @@ void apply_pedestrian_movement()
         }
         else if(current_pedestrian->state == LEAVING)
         {
+            increase_particle_at(current_pedestrian->current); 
             current_pedestrian->state = GOT_OUT; // After a timestep in the exit the pedestrian is removed from the environment.
         }
     }
@@ -463,13 +472,12 @@ static Pedestrian create_pedestrian(Location ped_coordinates)
  */
 static void calculate_transition_probabilities(Pedestrian current_pedestrian)
 {
-    double alpha = 1;
-
     double normalization_value = 0; // The N value in the formula
 
-    Double_Grid static_field = evaluate_pedestrian_vision(current_pedestrian) ? exits_set.aux_static_grid : exits_set.static_floor_field;
-    // Necessário calcular uma grid de distâncias
-    // Ou calcular apenas as distancias das celulas na vizinhança
+    bool vision_is_blocked = evaluate_pedestrian_vision(current_pedestrian);
+
+    Double_Grid static_field = vision_is_blocked ? exits_set.aux_static_grid : exits_set.static_floor_field;
+    Double_Grid distance_to_exits = vision_is_blocked ? exits_set.aux_distance_to_exits_grid : exits_set.distance_to_exits_grid;
 
     for(int i = 0; i < 3; i++)
     {
@@ -493,28 +501,32 @@ static void calculate_transition_probabilities(Pedestrian current_pedestrian)
                 continue;
             }
 
-            // Static floor field
-            current_pedestrian->probabilities[i][j] = exp(cli_args.ks * static_field[lin][col]);
+            if(!(i == 1 && j == 1) &&  pedestrian_position_grid[lin][col] > 0) // Ignores when it is the pedestrian's cell.
+            {
+                current_pedestrian->probabilities[i][j] = 0; // The equation is multiplied by 0 if cell is occupied, so the final value will be 0.
+                continue;
+            }
 
-            // Dynamic floor field
-            current_pedestrian->probabilities[i][j] *= exp(cli_args.kd * exits_set.dynamic_floor_field[lin][col]); 
+            // Static and Dynamic Fields
+            double exponential_exponent = cli_args.ks * static_field[lin][col] + cli_args.kd * exits_set.dynamic_floor_field[lin][col];
 
             // Fire floor field
             if(risky_cells_grid[lin][col] == NON_RISKY_CELLS) // If its a risky cell (danger cells have already been verified out) the pedestrian ignores the influence of the fire and this code isn't run.
             {
-                if(exits_set.distance_to_exits_grid[lin][col] < cli_args.risk_distance)
+                double alpha = 1;
+                if(distance_to_exits[lin][col] < cli_args.risk_distance)
                     alpha = cli_args.fire_alpha;
                 else
                     alpha = 1;
-
-                current_pedestrian->probabilities[i][j] /= exp(cli_args.kf * alpha * exits_set.fire_floor_field[i][j]);
+                
+                exponential_exponent -= cli_args.kf * alpha * exits_set.fire_floor_field[lin][col];
             }
 
-            if(! (i == 1 && j == 1)) // Ignores when it is the pedestrian's cell.
-                current_pedestrian->probabilities[i][j] *= pedestrian_position_grid[lin][col] > 0 ? 0 : 1; // Multiply by 0 if cell is occupied
+            current_pedestrian->probabilities[i][j] = exp(exponential_exponent);
 
             normalization_value += current_pedestrian->probabilities[i][j];  
-        }
+
+            }
     }
 
     if( !are_same_coordinates(current_pedestrian->previous, current_pedestrian->current))
@@ -538,20 +550,6 @@ static void calculate_transition_probabilities(Pedestrian current_pedestrian)
         {
             current_pedestrian->probabilities[i][j] *= normalization_value;
         }
-    }
-
-    if(current_pedestrian->id == 8)
-    {
-        printf("%d %d\n", current_pedestrian->current.lin, current_pedestrian->current.col);
-        for(int i = 0; i < 3; i++)
-        {
-            for(int j = 0; j < 3; j++)
-            {
-                printf("%.3lf ", current_pedestrian->probabilities[i][j]);
-            }
-            printf("\n");
-        }
-        fflush(stdout);
     }
 }
 
@@ -607,6 +605,7 @@ static Location calculate_inertia_mask(Location previous, Location current)
 
 /**
  * Verify if the given pedestrian has the vision of any non-blocked exit cell obstructed. If true, a static floor field without the affected exit cells is calculated and stored in the aux_static_grid.
+ * Also, the distance to the closest valid exit cell for the Moore neighborhood is calculated and stored in the aux_distance_to_cells_grid.
  * 
  * @param current_pedestrian The pedestrian whose vision will be evaluated.
  * @return A bool, indicating if the pedestrian's view of any exit cell is obstructed (true) or not (false).
@@ -648,7 +647,15 @@ static bool evaluate_pedestrian_vision(Pedestrian current_pedestrian)
         }
     }
 
-    calculate_zheng_static_field(exit_cell_coordinates, num_exit_cells, exits_set.aux_static_grid);
+    if(vision_blocked)
+    {
+        calculate_zheng_static_field(exit_cell_coordinates, num_exit_cells, exits_set.aux_static_grid);
+
+        Location upper_left = {current_loc.lin - 1, current_loc.col - 1};
+        Location lower_right = {current_loc.lin + 1, current_loc.col + 1};
+
+        calculate_exit_distance_at_interval(exit_cell_coordinates, num_exit_cells, upper_left, lower_right);
+    }
 
     free(exit_cell_coordinates);
 
@@ -743,16 +750,61 @@ static bool is_vision_blocked(Location origin, Location destination)
     return false;
 }
 
+
 /**
- * Verify if the given pedestrian is dead (it is on a cell with fire).
+ * Verify if the given pedestrian is within a fire cell.
  * 
  * @param current_pedestrian Pedestrian for which the verification will be performed.
  * 
- * @return bool, where True indicates that the pedestrian is dead, or False otherwise.
+ * @return bool, where True indicates that the pedestrian is on fire, or False otherwise.
  */
-static bool is_pedestrian_dead(Pedestrian current_pedestrian)
+static bool is_pedestrian_on_fire(Pedestrian current_pedestrian)
 {
     Location current_location = current_pedestrian->current;
 
     return fire_grid[current_location.lin][current_location.col] == FIRE_CELL;
+}
+
+/**
+ * When a pedestrian is in a cell on fire, this function attempts to move the pedestrian to a neighboring exit cell (even if it is blocked) or to an adjacent empty cell. If neither of these actions is possible, the pedestrian is marked as deceased.
+ * 
+ * @param current_pedestrian Pedestrian for which the attempt will be performed.
+ * 
+ * @return bool, where false indicates that the pedestrian dies (or that it wasn't in a cell with fire), and true if the pedestrian is successfully moved.
+ */
+static bool force_pedestrian_out_of_fire(Pedestrian current_pedestrian)
+{
+    if(! is_pedestrian_on_fire(current_pedestrian))
+        return false;
+
+    bool adjacent_cell_found = false;
+    for(int m = 0; m < 4; m++)
+    {
+        int lin = current_pedestrian->current.lin + von_neumann_neighbor_modifiers[m].lin;
+        int col = current_pedestrian->current.col + von_neumann_neighbor_modifiers[m].col;
+
+        if(! is_within_grid_lines(lin) || 
+            ! is_within_grid_columns(col))
+            continue;
+        
+        if((exits_only_grid[lin][col] == BLOCKED_EXIT_CELL || exits_only_grid[lin][col] == EXIT_CELL) && pedestrian_position_grid[lin][col] == 0)
+        {
+            current_pedestrian->target = (Location) {lin, col};
+            return true;
+        }
+
+        if(is_cell_empty((Location) {lin, col}))
+        {
+            current_pedestrian->target = (Location) {lin, col};
+            adjacent_cell_found = true;
+        }
+    }
+
+    if(adjacent_cell_found == false)
+    {
+        pedestrian_set.num_dead_pedestrians += 1;
+        current_pedestrian->state = DEAD;
+    }
+
+    return adjacent_cell_found;
 }

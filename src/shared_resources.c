@@ -18,6 +18,9 @@
 #include"../headers/pedestrian.h"
 #include"../headers/exit.h"
 
+Location von_neumann_neighbor_modifiers[4] = {{-1, 0}, {0, -1}, {0, 1} , {1, 0}};
+Location moore_neighbor_modifiers[8] = {{-1,-1}, {-1,0}, {-1,1}, {0,-1}, {0,1}, {1,-1}, {1,0}, {1,1}};
+
 /**
  * Verifies if the environment_origin selected uses data extracted from an auxiliary file.
  * 
@@ -75,6 +78,18 @@ bool are_same_coordinates(Location first, Location second)
 double euclidean_distance(Location first, Location second)
 {
     return sqrt(pow(first.lin - second.lin, 2) + pow(first.col - second.col, 2));
+}
+
+/**
+ * Calculates the Manhattan distance between the provided coordinates.
+ * @param first The first pair of coordinates.
+ * @param second The second pair of coordinates.
+ * 
+ * @return A double, the Manhattan distance between the two pair of coordinates provided.
+ */
+double manhattan_distance(Location first, Location second)
+{
+    return abs(first.lin - second.lin) + abs(first.col - second.col);
 }
 
 /**

@@ -14,7 +14,6 @@
 
 #include"../headers/grid.h"
 #include"../headers/exit.h"
-#include"../headers/fire_field.h"
 #include"../headers/fire_dynamics.h"
 #include"../headers/pedestrian.h"
 #include"../headers/initialization.h"
@@ -28,6 +27,7 @@ const char *output_path = "output/";
 static Function_Status open_environment_file(FILE **environment_file);
 static Function_Status symbol_processing(char read_char, Location coordinates);
 static void set_all_private_grids();
+static void determine_adjacent_to_impassable_grid();
 
 /**
  * Opens the auxiliary file in read mode.  
@@ -120,9 +120,10 @@ Function_Status allocate_grids()
     fire_distance_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     heatmap_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     risky_cells_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
+    adjacent_to_impassable_grid = allocate_integer_grid(cli_args.global_line_number, cli_args.global_column_number);
     if(obstacle_grid == NULL || exits_only_grid == NULL || pedestrian_position_grid == NULL 
     || fire_grid == NULL     || heatmap_grid == NULL    || fire_distance_grid == NULL
-    || initial_fire_grid == NULL     || risky_cells_grid == NULL)
+    || initial_fire_grid == NULL     || risky_cells_grid == NULL || adjacent_to_impassable_grid == NULL)
     {
         fprintf(stderr,"Failure during allocation of the integer grids with dimensions: %d x %d.\n", cli_args.global_line_number, cli_args.global_column_number);
         return FAILURE;
@@ -162,7 +163,7 @@ Function_Status load_environment()
         return FAILURE;
 
     char read_char = '\0';
-    int returned_value = fscanf(environment_file,"%c",&read_char);// responsible for eliminating the '\n' after the environment dimensions.
+    fscanf(environment_file,"%c",&read_char);// responsible for eliminating the '\n' after the environment dimensions.
     for(int i = 0; i < cli_args.global_line_number; i++)
     {
         int h = 0;
@@ -193,6 +194,7 @@ Function_Status load_environment()
     }
 
     set_all_private_grids();
+    determine_adjacent_to_impassable_grid();
 
     fclose(environment_file);
 
@@ -219,6 +221,8 @@ Function_Status generate_environment()
                 obstacle_grid[i][h] = IMPASSABLE_OBJECT;
         }
     }
+
+    determine_adjacent_to_impassable_grid();
 
     return SUCCESS;
 }
@@ -451,5 +455,35 @@ static void set_all_private_grids()
     for(int exit_index = 0; exit_index < exits_set.num_exits; exit_index++)
     {
         set_private_grid_data(exits_set.list[exit_index]);
+    }
+}
+
+/**
+ * Determine the cells of the grid that are adjacent (in the orthogonal directions) to impassable_object cells.
+ */
+static void determine_adjacent_to_impassable_grid()
+{
+    fill_integer_grid(adjacent_to_impassable_grid, cli_args.global_line_number, cli_args.global_column_number, 0);
+
+    for(int i = 0; i < cli_args.global_line_number; i++)
+    {
+        for(int j = 0; j < cli_args.global_column_number; j++)
+        {
+            if(obstacle_grid[i][j] != IMPASSABLE_OBJECT)
+                continue;
+
+            for(int m = 0; m < 4; m++)
+            {
+                int lin = i + von_neumann_neighbor_modifiers[m].lin;
+                int col = j + von_neumann_neighbor_modifiers[m].col;
+
+                if(! is_within_grid_lines(lin) || 
+                    ! is_within_grid_columns(col) ||
+                    obstacle_grid[lin][col]== IMPASSABLE_OBJECT)
+                    continue;
+
+                adjacent_to_impassable_grid[lin][col] = 1;
+            }
+        }
     }
 }

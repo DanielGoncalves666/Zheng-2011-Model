@@ -76,7 +76,7 @@ void calculate_kirchner_static_field(Location *exit_cell_coordinates, int num_ex
 
 /**
  * Calculates the static floor field as described in the Zheng's 2011 article.
- * 
+ *  
  * @param exit_cell_coordinates A list of all the valid exit cells.
  * @param num_exit_cells The number of exit cells.
  * @param destination_grid The grid where the computed static field will be stored. If NULL is provided, the default will be exits_set.static_floor_field.
@@ -93,26 +93,30 @@ void calculate_zheng_static_field(Location *exit_cell_coordinates, int num_exit_
     {
         for(int j = 0; j < cli_args.global_column_number; j++)
         {
-            if(exits_only_grid[i][j] != EXIT_CELL) // Exits cells must have their static field calculated
+            if(exits_only_grid[i][j] == EXIT_CELL)
             {
-                if(exits_only_grid[i][j] == BLOCKED_EXIT_CELL)
-                {
-                    destination_grid[i][j] = BLOCKED_EXIT_CELL;
-                    continue;
-                }
-
-                if(obstacle_grid[i][j] == IMPASSABLE_OBJECT)
-                {
-                    destination_grid[i][j] = IMPASSABLE_OBJECT;
-                    continue;
-                }
-
-                if(fire_grid[i][j] == FIRE_CELL)
-                {
-                    destination_grid[i][j] = FIRE_CELL;
-                    continue;
-                }
+                destination_grid[i][j] = 1.5; // 1.5 is used to make the exit value greater than the immediate neighbors
+                continue;
             }
+
+            if(exits_only_grid[i][j] == BLOCKED_EXIT_CELL)
+            {
+                destination_grid[i][j] = BLOCKED_EXIT_CELL;
+                continue;
+            }
+
+            if(obstacle_grid[i][j] == IMPASSABLE_OBJECT)
+            {
+                destination_grid[i][j] = IMPASSABLE_OBJECT;
+                continue;
+            }
+
+            if(fire_grid[i][j] == FIRE_CELL)
+            {
+                destination_grid[i][j] = FIRE_CELL;
+                continue;
+            }
+            
 
             for(int cell_index = 0; cell_index < num_exit_cells; cell_index++)
             {
@@ -125,7 +129,7 @@ void calculate_zheng_static_field(Location *exit_cell_coordinates, int num_exit_
 
             // The plus one is used to avoid division by zero when calculating the floor field for an exit cell. Some tests to verify the best number to use may be good.
             // IT'S NOT PRESENT IN THE ORIGINAL CALCULATION OF THE ZHENG FLOOR FIELD
-            destination_grid[i][j] = 1 / (destination_grid[i][j] + 1);
+            destination_grid[i][j] = 1.0 / destination_grid[i][j];
             sum_of_all_distances += destination_grid[i][j];
         }
     }
@@ -134,7 +138,7 @@ void calculate_zheng_static_field(Location *exit_cell_coordinates, int num_exit_
     {
         for(int j = 0; j < cli_args.global_column_number; j++)
         {
-            if(destination_grid[i][j] == IMPASSABLE_OBJECT || destination_grid[i][j] == FIRE_CELL)
+            if(destination_grid[i][j] == IMPASSABLE_OBJECT || destination_grid[i][j] == FIRE_CELL || exits_only_grid[i][j] == BLOCKED_EXIT_CELL)
                 continue;
 
             destination_grid[i][j] /= sum_of_all_distances;

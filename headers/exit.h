@@ -22,6 +22,7 @@ typedef struct{
     Double_Grid distance_to_exits_grid; // Grid storing the distance to the nearest exit for each cell.
     Double_Grid aux_static_grid; // Temporary auxiliary grid for storing an alternative static floor field, used for pedestrians unable to visualize certain exits.
     Double_Grid aux_dynamic_grid; // Grid used to help in the diffusion process.
+    Double_Grid aux_distance_to_exits_grid; // Grid used to store the distance to exits when a pedestrian doesn't see at least one of them.
 } Exits_Set;
 
 Function_Status add_new_exit(Location exit_coordinates);
@@ -32,11 +33,11 @@ void deallocate_exits();
 void check_for_exits_blocked_by_fire();
 Location *extract_non_blocked_exit_coordinates(int *num_exit_cells);
 void calculate_distance_to_closest_exit(Location *exit_cell_coordinates, int num_exit_cells);
+void calculate_exit_distance_at_interval(Location *exit_cell_coordinates, int num_exit_cells, Location upper_left_cell, Location lower_right_cell);
 void reset_exits();
 bool is_exit_accessible(Exit current_exit);
 
 extern Int_Grid exits_only_grid;
 extern Exits_Set exits_set;
-extern Location non_diagonal_modifiers[4];
 
 #endif

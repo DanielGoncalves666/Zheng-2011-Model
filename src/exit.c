@@ -17,8 +17,6 @@
 #include"../headers/static_field.h"
 #include"../headers/shared_resources.h"
 
-Location non_diagonal_modifiers[4] = {{-1, 0}, {0, -1}, {0, 1} , {1, 0}}; // The modifiers for the neighbor cells not in the diagonals.
-
 Int_Grid exits_only_grid = NULL; // Grid containing only the exits.
                                  // Contains cells with either EXIT_CELL or EMPTY_CELL values.
 
@@ -117,9 +115,11 @@ Function_Status allocate_exits_set_fields()
     exits_set.aux_static_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     exits_set.aux_dynamic_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     exits_set.distance_to_exits_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
+    exits_set.aux_distance_to_exits_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     if(exits_set.static_floor_field == NULL || exits_set.dynamic_floor_field == NULL || 
        exits_set.fire_floor_field == NULL || exits_set.aux_static_grid == NULL ||
-       exits_set.aux_dynamic_grid == NULL || exits_set.distance_to_exits_grid == NULL)
+       exits_set.aux_dynamic_grid == NULL || exits_set.distance_to_exits_grid == NULL ||
+       exits_set.aux_distance_to_exits_grid == NULL)
     {
         fprintf(stderr,"Failure during the allocation of the exit_set double grids.\n");
         return FAILURE;
@@ -152,12 +152,14 @@ void deallocate_exits()
     deallocate_grid((void **) exits_set.aux_static_grid, cli_args.global_line_number);
     deallocate_grid((void **) exits_set.aux_dynamic_grid, cli_args.global_line_number);
     deallocate_grid((void **) exits_set.distance_to_exits_grid, cli_args.global_line_number);
+    deallocate_grid((void **) exits_set.aux_distance_to_exits_grid, cli_args.global_line_number);
     exits_set.static_floor_field = NULL;
     exits_set.dynamic_floor_field = NULL;
     exits_set.fire_floor_field = NULL;
     exits_set.aux_static_grid = NULL;
     exits_set.aux_dynamic_grid = NULL;
     exits_set.distance_to_exits_grid = NULL;
+    exits_set.aux_distance_to_exits_grid = NULL;
 
     exits_set.num_exits = 0;
 }
@@ -181,7 +183,7 @@ void check_for_exits_blocked_by_fire()
         {
             current_exit->is_blocked_by_fire = true;
 
-            for(int cell_index; cell_index < current_exit->width; cell_index++)
+            for(int cell_index = 0; cell_index < current_exit->width; cell_index++)
             {
                 Location curr = current_exit->coordinates[cell_index];
                 exits_only_grid[curr.lin][curr.col] = BLOCKED_EXIT_CELL;
@@ -227,6 +229,9 @@ Location *extract_non_blocked_exit_coordinates(int *num_exit_cells)
     return exit_cell_coordinates;
 }
 
+
+// É possível remover essa função e adicionar o calculo junto com o do campo de piso.
+
 /**
  * Computes the distance from each cell to the nearest exit cell, storing the information in the distance_to_exits_grid.
  * 
@@ -251,6 +256,40 @@ void calculate_distance_to_closest_exit(Location *exit_cell_coordinates, int num
 
                 if(exits_set.distance_to_exits_grid[i][j] == -1 || distance_to_exit < exits_set.distance_to_exits_grid[i][j])
                     exits_set.distance_to_exits_grid[i][j] = distance_to_exit;
+            }
+        }
+    }
+}
+
+/**
+ * Computes the distance from each cell in the given interval to the nearest exit cell. The interval is delimited by the two given locations and the result is stored in the exits_set.aux_distance_to_exits_grid.
+ * 
+ * @param exit_cell_coordinates A list of all the valid exit cells.
+ * @param num_exit_cells The number of exit cells.
+ * @param upper_left_cell The coordinates of the leftmost upper cell in the interval.
+ * @param lower_right_cell The coordinates of the rightmost lower cell in the interval.
+ */
+void calculate_exit_distance_at_interval(Location *exit_cell_coordinates, int num_exit_cells, Location upper_left_cell, Location lower_right_cell)
+{    
+    // Verificações aqui.
+
+    for(int i = upper_left_cell.lin; i < lower_right_cell.lin; i++)
+    {
+        if(! is_within_grid_lines(i))
+            continue;
+
+        for(int j = upper_left_cell.col; j < lower_right_cell.col; j++)
+        {
+            if(! is_within_grid_columns(j))
+                continue;
+
+            for(int cell_index = 0; cell_index < num_exit_cells; cell_index++)
+            {
+                Location current_exit_cell = exit_cell_coordinates[cell_index]; // The current exit cell being used as the reference.
+                double distance_to_exit = euclidean_distance(current_exit_cell, (Location) {i,j});
+
+                if(exits_set.aux_distance_to_exits_grid[i][j] == -1 || distance_to_exit < exits_set.aux_distance_to_exits_grid[i][j])
+                    exits_set.aux_distance_to_exits_grid[i][j] = distance_to_exit;
             }
         }
     }
@@ -286,7 +325,7 @@ bool is_exit_accessible(Exit current_exit)
 
         for(int i = 0; i < 4; i++)
         {
-            Location current_modifier = non_diagonal_modifiers[i];
+            Location current_modifier = von_neumann_neighbor_modifiers[i];
 
             if(! is_within_grid_lines(c.lin + current_modifier.lin))
                 continue;
@@ -357,7 +396,7 @@ static bool is_exit_blocked_by_fire(Exit current_exit)
 
         for(int i = 0; i < 4; i++)
         {
-            Location current_modifier = non_diagonal_modifiers[i];
+            Location current_modifier = von_neumann_neighbor_modifiers[i];
 
             if(! is_within_grid_lines(c.lin + current_modifier.lin))
                 continue;

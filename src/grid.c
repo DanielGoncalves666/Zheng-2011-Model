@@ -17,7 +17,7 @@
 Int_Grid obstacle_grid = NULL; // Grid containing walls and obstacles.
                                // Contains cells with either IMPASSABLE_OBJECT or EMPTY_CELL values.
                                // Any cell with an exit is assigned IMPASSABLE_OBJECT value.
-Int_Grid risky_cells_grid = NULL; // Grid containing either 1 for cells that are one unit distance between the corder of the fire and a wall (or impassable obstacle) or 0 otherwise. 
+Int_Grid adjacent_to_impassable_grid = NULL; // Grid indicating which cells are adjacent to impassable_objects, based on the von Neumann neighborhood (orthogonal neighbors only). 1 for adjacent cells and 0 otherwise.
 Int_Grid heatmap_grid = NULL; // Grid containing the count of pedestrian visits per cell.
 
 /**

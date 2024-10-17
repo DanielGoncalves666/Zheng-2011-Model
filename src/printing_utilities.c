@@ -7,6 +7,7 @@
 
 #include<stdio.h>
 #include<string.h>
+#include<math.h>
 #include<time.h>
 
 #include"../headers/exit.h"
@@ -75,12 +76,7 @@ void print_complete_environment(FILE *output_stream, int simulation_number, int 
 			for(int j = 0; j < cli_args.global_column_number; j++)
 			{
 				if(pedestrian_position_grid[i][j] != 0)
-				{
-					if(fire_grid[i][j] == FIRE_CELL)
-						fprintf(output_stream, "🪦");
-					else
-						fprintf(output_stream,"👤");
-				}
+					fprintf(output_stream,"👤");
 				else if(fire_grid[i][j] == FIRE_CELL)
 					fprintf(output_stream, "🔥");
 				else if(exits_only_grid[i][j] == EXIT_CELL)
@@ -96,6 +92,51 @@ void print_complete_environment(FILE *output_stream, int simulation_number, int 
 	}
 	else
 		fprintf(stderr, "No valid stream was provided at print_complete_environment.\n");		
+}
+
+/**
+ * Prints the probabilities of every cell in the environment without the normalization required in the formula and ignoring the presence of pedestrians.
+ * 
+ * @param output_stream Stream where the data will be written.
+ */
+void print_probabilities_without_normalization(FILE *output_stream)
+{
+	for(int i = 0; i < cli_args.global_line_number; i++){
+		for(int j = 0; j < cli_args.global_column_number; j++)
+		{
+			if(fire_grid[i][j] == FIRE_CELL)
+			{
+				fprintf(stdout, "*FIRE** ");
+				continue;
+			}
+
+			if((obstacle_grid[i][j] == IMPASSABLE_OBJECT && exits_only_grid[i][j] != EXIT_CELL))
+			{
+				fprintf(stdout, "%7.2f ", 0.0);
+				continue;
+			}
+
+			double alpha;
+			if(exits_set.distance_to_exits_grid[i][j] < cli_args.risk_distance)
+				alpha = cli_args.fire_alpha;
+			else
+				alpha = 1;
+
+			double exponent = cli_args.ks * exits_set.static_floor_field[i][j] + cli_args.kd * exits_set.dynamic_floor_field[i][j] - 
+						     cli_args.kf * alpha * exits_set.fire_floor_field[i][j];
+
+			double result = exp(exponent);
+
+			if(result >= 10000)
+				fprintf(stdout, "******* ");
+			else
+				fprintf(stdout, "%7.2lf ",  result);
+
+		}
+
+		printf("\n\n");
+	}
+	printf("\n");
 }
 
 /**

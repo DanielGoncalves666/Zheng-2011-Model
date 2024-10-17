@@ -26,6 +26,6 @@ void deallocate_grid(void **grid, int line_number);
 
 extern Int_Grid obstacle_grid;
 extern Int_Grid heatmap_grid;
-extern Int_Grid risky_cells_grid;
+extern Int_Grid adjacent_to_impassable_grid;
 
 #endif

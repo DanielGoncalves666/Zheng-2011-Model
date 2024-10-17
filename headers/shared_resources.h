@@ -48,15 +48,18 @@ typedef struct{
 #define EXIT_CELL -1001
 #define BLOCKED_EXIT_CELL -1004
 #define EMPTY_CELL -1002
-#define FIRE_CELL -1003
 
 bool origin_uses_auxiliary_data();
 bool origin_uses_static_pedestrians();
 bool origin_uses_static_exits();
 bool are_same_coordinates(Location first, Location second);
 double euclidean_distance(Location first, Location second);
+double manhattan_distance(Location first, Location second);
 float rand_within_limits(float min, float max);
 bool probability_test(double probability);
 int roulette_wheel_selection(double *probability_list, int length, double total_probability);
+
+extern Location von_neumann_neighbor_modifiers[4];
+extern Location moore_neighbor_modifiers[8];
 
 #endif
