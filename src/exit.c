@@ -20,7 +20,7 @@
 Int_Grid exits_only_grid = NULL; // Grid containing only the exits.
                                  // Contains cells with either EXIT_CELL or EMPTY_CELL values.
 
-Exits_Set exits_set = {NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL};
+Exits_Set exits_set = {NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL};
 
 static Exit create_new_exit(Location exit_coordinates);
 static bool is_exit_blocked_by_fire(Exit current_exit);
@@ -114,8 +114,10 @@ Function_Status allocate_exits_set_fields()
     exits_set.fire_floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     exits_set.aux_static_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     exits_set.aux_dynamic_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
+    exits_set.fast_pedestrian_trace = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     exits_set.distance_to_exits_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     exits_set.aux_distance_to_exits_grid = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
+    exits_set.normalized_dynamic_floor_field = allocate_double_grid(cli_args.global_line_number, cli_args.global_column_number);
     if(exits_set.static_floor_field == NULL || exits_set.dynamic_floor_field == NULL || 
        exits_set.fire_floor_field == NULL || exits_set.aux_static_grid == NULL ||
        exits_set.aux_dynamic_grid == NULL || exits_set.distance_to_exits_grid == NULL ||
@@ -151,8 +153,10 @@ void deallocate_exits()
     deallocate_grid((void **) exits_set.fire_floor_field, cli_args.global_line_number);
     deallocate_grid((void **) exits_set.aux_static_grid, cli_args.global_line_number);
     deallocate_grid((void **) exits_set.aux_dynamic_grid, cli_args.global_line_number);
+    deallocate_grid((void **) exits_set.fast_pedestrian_trace, cli_args.global_line_number);
     deallocate_grid((void **) exits_set.distance_to_exits_grid, cli_args.global_line_number);
     deallocate_grid((void **) exits_set.aux_distance_to_exits_grid, cli_args.global_line_number);
+    deallocate_grid((void **) exits_set.normalized_dynamic_floor_field, cli_args.global_line_number);
     exits_set.static_floor_field = NULL;
     exits_set.dynamic_floor_field = NULL;
     exits_set.fire_floor_field = NULL;

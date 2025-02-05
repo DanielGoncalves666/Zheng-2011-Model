@@ -27,7 +27,7 @@ typedef struct cell_conflict{
     int pedestrian_allowed;
 }cell_conflict;
 
-Pedestrian_Set pedestrian_set = {NULL,0,0};
+Pedestrian_Set pedestrian_set = {NULL,0,0,0};
 
 static Pedestrian create_pedestrian(Location ped_coordinates);
 static void calculate_transition_probabilities(Pedestrian current_pedestrian);
@@ -50,15 +50,19 @@ Function_Status insert_pedestrians_at_random(int num_pedestrians_to_insert)
 {
     if(num_pedestrians_to_insert <= 0)
     {
-        fprintf(stderr, "The number os pedestrians to randomly insert in the environment must be greater than 0.\n");
+        fprintf(stderr, "The number of pedestrians to randomly insert in the environment must be greater than 0.\n");
         return FAILURE;
     }
 
     if(fill_integer_grid(pedestrian_position_grid, cli_args.global_line_number, cli_args.global_column_number, 0) == FAILURE)
         return FAILURE;
 
-    for(int p_index = 0; p_index < num_pedestrians_to_insert; p_index++)
+    int num_fast_pedestrians = num_pedestrians_to_insert * cli_args.fast_ped_proportion;
+    bool create_as_fast = true; // The insertion of pedestrians begins by the fast ones, if they are to be included.
+    for(int p_index = 0, fast_pedestrian_counter = 0; p_index < num_pedestrians_to_insert; p_index++, fast_pedestrian_counter++)
     {
+        if(fast_pedestrian_counter >= num_fast_pedestrians)
+            create_as_fast = false;
 
         int line = (int) rand_within_limits(1, cli_args.global_line_number - 1);
         int column = (int) rand_within_limits(1, cli_args.global_column_number - 1);
@@ -75,7 +79,7 @@ Function_Status insert_pedestrians_at_random(int num_pedestrians_to_insert)
             {       
                 if(is_cell_empty((Location) {line, column}) == true)
                 {
-                    if( add_new_pedestrian((Location) {line, column}) == FAILURE)
+                    if( add_new_pedestrian((Location) {line, column}, create_as_fast) == FAILURE)
                         return FAILURE;
 
                     pedestrian_position_grid[line][column] = pedestrian_set.list[pedestrian_set.num_pedestrians - 1]->id;
@@ -113,9 +117,10 @@ Function_Status insert_pedestrians_at_random(int num_pedestrians_to_insert)
  * @note The ID of the newly created pedestrian is given in this function.
  * 
  * @param ped_coordinates New pedestrian coordinates.
+ * @param fast_pedestrian A boolean, indicating if the pedestrian to be created should be fast or not.
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
 */
-Function_Status add_new_pedestrian(Location ped_coordinates)
+Function_Status add_new_pedestrian(Location ped_coordinates, bool fast_pedestrian)
 {
     Pedestrian new_pedestrian = create_pedestrian(ped_coordinates);
     if(new_pedestrian == NULL)
@@ -125,6 +130,9 @@ Function_Status add_new_pedestrian(Location ped_coordinates)
     }
 
     pedestrian_set.num_pedestrians += 1;
+    if(fast_pedestrian)
+        pedestrian_set.num_fast_pedestrians += 1;
+
     pedestrian_set.list = realloc(pedestrian_set.list, sizeof(struct pedestrian) * pedestrian_set.num_pedestrians);
     if(pedestrian_set.list == NULL)
     {
@@ -133,6 +141,7 @@ Function_Status add_new_pedestrian(Location ped_coordinates)
     }
 
     new_pedestrian->id = pedestrian_set.num_pedestrians;
+    new_pedestrian->fast_pedestrian = fast_pedestrian;
     pedestrian_set.list[pedestrian_set.num_pedestrians - 1] = new_pedestrian;
 
     return SUCCESS;
@@ -155,12 +164,17 @@ void deallocate_pedestrians()
 
 /**
  * Determines the destination cell for each pedestrian.
+ * 
+ * @param only_fast A boolean, indicating if the operations should be performed only on fast pedestrians.
 */
-void evaluate_pedestrians_movements()
+void evaluate_pedestrians_movements(bool only_fast)
 {
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
+
+        if(only_fast && current_pedestrian->fast_pedestrian == false)
+            continue;
 
         if(current_pedestrian->state != MOVING)
             continue;
@@ -184,9 +198,10 @@ void evaluate_pedestrians_movements()
  * 
  * @param pedestrian_conflicts A pointer to a pointer to a cell_conflict structure, representing the address of a list of cell_conflict structures. The function will create this list of conflicts and assign its pointer to the provided pointer. 
  * @param num_conflicts Pointer to a integer, where the number of conflicts will be stored.
+ * @param only_fast A boolean, indicating if the operations should be performed only on fast pedestrians.
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
 */
-Function_Status identify_pedestrian_conflicts(Cell_Conflict *pedestrian_conflicts, int *num_conflicts)
+Function_Status identify_pedestrian_conflicts(Cell_Conflict *pedestrian_conflicts, int *num_conflicts, bool only_fast)
 {
     int conflict_number = 0;
     Int_Grid conflict_grid = allocate_integer_grid(cli_args.global_line_number,cli_args.global_column_number);
@@ -201,6 +216,9 @@ Function_Status identify_pedestrian_conflicts(Cell_Conflict *pedestrian_conflict
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
+
+        if(only_fast && current_pedestrian->fast_pedestrian == false)
+            continue;
 
         if(current_pedestrian->state != MOVING)
             continue;
@@ -332,13 +350,17 @@ void print_pedestrian_conflict_information(Cell_Conflict pedestrian_conflicts, i
  * 
  * @note If the immediate_exit flag is on, the pedestrians go directly from MOVING to GOT_OUT when a exit is reached.
  * 
+ * @param only_fast A boolean, indicating if the operations should be performed only on fast pedestrians.
 */
-void apply_pedestrian_movement()
+void apply_pedestrian_movement(bool only_fast)
 {
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
         
+        if(only_fast && current_pedestrian->fast_pedestrian == false)
+            continue;
+
         if(current_pedestrian->state == STOPPED )
         {
             current_pedestrian->previous = current_pedestrian->current;
@@ -350,7 +372,10 @@ void apply_pedestrian_movement()
 
         if(current_pedestrian->state == MOVING)
         {
-            increase_particle_at(current_pedestrian->current); 
+            if(only_fast)
+                increase_particle_fast_only_trace(current_pedestrian->current);
+            else
+                increase_particle_at(current_pedestrian->current); 
 
             current_pedestrian->previous = current_pedestrian->current;
             current_pedestrian->current = current_pedestrian->target;
@@ -364,7 +389,11 @@ void apply_pedestrian_movement()
         }
         else if(current_pedestrian->state == LEAVING)
         {
-            increase_particle_at(current_pedestrian->current); 
+            if(only_fast)
+                increase_particle_fast_only_trace(current_pedestrian->current);
+            else
+                increase_particle_at(current_pedestrian->current); 
+
             current_pedestrian->state = GOT_OUT; // After a timestep in the exit the pedestrian is removed from the environment.
         }
     }
@@ -401,18 +430,23 @@ void update_pedestrian_position_grid()
             continue;
 
         pedestrian_position_grid[current_pedestrian->current.lin][current_pedestrian->current.col] = current_pedestrian->id;
-        heatmap_grid[current_pedestrian->current.lin][current_pedestrian->current.col]++;
+        //heatmap_grid[current_pedestrian->current.lin][current_pedestrian->current.col]++; 
     }
 }
 
 /**
  * Reset the state of all pedestrians to MOVING, except for those in the states GOT_OUT, LEAVING or DEAD.
+ * 
+ * @param only_fast A boolean, indicating if the operations should be performed only on fast pedestrians.
 */
-void reset_pedestrian_state()
+void reset_pedestrian_state(bool only_fast)
 {
     for(int p_index = 0; p_index < pedestrian_set.num_pedestrians; p_index++)
     {
         Pedestrian current_pedestrian = pedestrian_set.list[p_index];
+
+        if(only_fast && current_pedestrian->fast_pedestrian == false)
+            continue;
 
         if(current_pedestrian->state != GOT_OUT && current_pedestrian->state != LEAVING && current_pedestrian->state != DEAD)
             current_pedestrian->state = MOVING;
@@ -508,7 +542,7 @@ static void calculate_transition_probabilities(Pedestrian current_pedestrian)
             }
 
             // Static and Dynamic Fields
-            double exponential_exponent = cli_args.ks * static_field[lin][col] + cli_args.kd * exits_set.dynamic_floor_field[lin][col];
+            double exponential_exponent = cli_args.ks * static_field[lin][col] + cli_args.kd * exits_set.normalized_dynamic_floor_field[lin][col];
 
             // Fire floor field
             if(risky_cells_grid[lin][col] == NON_RISKY_CELLS) // If its a risky cell (danger cells have already been verified out) the pedestrian ignores the influence of the fire and this code isn't run.

@@ -69,6 +69,7 @@ const char doc[] = "zheng - Simulates pedestrian evacuation using the Zheng (201
 #define OPT_OMEGA 1018
 #define OPT_MU 1019
 #define OPT_FIRE_SPREAD_RATE 1020
+#define OPT_FAST_PEDESTRIAN_PROPORTION 1021
 #define OPT_MIN_SIMULATION_VALUE 2000
 #define OPT_MAX_SIMULATION_VALUE 2001
 #define OPT_STEP_VALUE 2002
@@ -108,10 +109,11 @@ struct argp_option options[] = {
     {"kf", OPT_FIRE_COUPLING, "KF", 0, "The fire field coupling constant is one of the parameters used to adjust the strength of the fire floor field. Defaults to 1.", 14},
     {"risk-distance", OPT_RISK_DISTANCE, "RISK", 0, "The maximum distance (exclusive) within which a pedestrian near an exit is willing to take more risks to attempt to leave the environment. In fact, what happens is that the second parameter used to adjust the strength of the fire floor field will be FIRE-ALPHA. Defaults to 6."},
     {"fire-alpha", OPT_FIRE_ALPHA, "FIRE-ALPHA", 0, "The value of the second parameter to adjust the strength of the fire floor field. If a pedestrian is closer than RISK, then this value is used in the calculation of the transition probabilities (instead of 1). This has the effect that the pedestrians are more willing to pass closer to a fire if that means they can exit the environment. Defaults to 0.5."},
-    {"fire-gamma", OPT_FIRE_GAMMA, "FIRE_GAMMA", 0, "A constant used in the calculation of the fire floor field. If the distance from a cell to a cell with fire is greater than FIRE_GAMMA, the fire floor field (FF) value of that cell will be 0. Otherwise, the value will be equal to or greater than 0. The default value of FIRE_GAMMA is 8."},
+    {"fire-gamma", OPT_FIRE_GAMMA, "FIRE-GAMMA", 0, "A constant used in the calculation of the fire floor field. If the distance from a cell to a cell with fire is greater than FIRE_GAMMA, the fire floor field (FF) value of that cell will be 0. Otherwise, the value will be equal to or greater than 0. The default value of FIRE_GAMMA is 8."},
     {"omega", OPT_OMEGA, "OMEGA", 0, "In the Zheng paper, pedestrians try to maintain their preferred direction and velocity. The constant Omega increases the probability that a pedestrian will move to cells aligned with their preferred direction. Must be a value greater or equal to 1. Defaults to 1."},
     {"mu", OPT_MU, "MU", 0, "The probability that, in a conflict where multiple pedestrians attempt to move to the same cell, no one will successfully move. Value must be between 0 and 1, both inclusive. Defaults to 0.1."},
     {"spread-rate", OPT_FIRE_SPREAD_RATE, "RATE", 0, "The velocity, in meters per second, that the fire spreads in the environment. Defaults to 0.1 m/s."},
+    {"fast-ped-proportion", OPT_FAST_PEDESTRIAN_PROPORTION, "FAST-PROPORTION", 0, "The proportion of the total number of pedestrians that will be classified as fast pedestrians. Fast pedestrians update their positions twice per timestep. The default value is 0."},
     
     {"\nRange values for simulation focused on a constant:\n",0,0,OPTION_DOC,0, 15},
     {"min", OPT_MIN_SIMULATION_VALUE, "MIN", 0, "The minimum value that the variable constant will assume. Defaults to 0.", 16},
@@ -165,7 +167,8 @@ Command_Line_Args cli_args = {
     .min=0,
     .max=1,
     .step=0.01,
-    .spread_rate=0.1
+    .spread_rate=0.1,
+    .fast_ped_proportion = 0
 };
 // When loading an environment global_line_number and global_column_number will no be obtained from the command line arguments. Besides, total_num_pedestrians will be automatic determined by the program on some environment origin formats.
 
@@ -444,6 +447,14 @@ error_t parser_function(int key, char *arg, struct argp_state *state)
                 return EIO;
             }
             break;
+        case OPT_FAST_PEDESTRIAN_PROPORTION:
+            cli_args->fast_ped_proportion = atof(arg);
+            if(cli_args->fast_ped_proportion < 0 || cli_args->fast_ped_proportion > 1)
+            {
+                fprintf(stderr, "The fast_ped_proportion must be in the [0,1] range.\n");
+                return EIO;
+            }
+            break;
         case ARGP_KEY_ARG:
             fprintf(stderr, "No positional argument was expect, but %s was given.\n", arg);
             return EINVAL;
@@ -569,6 +580,9 @@ void extract_full_command(char *full_command, int key, char *arg)
             break;
         case OPT_FIRE_SPREAD_RATE:
             sprintf(aux, " --spread-rate=%s",arg);
+            break;
+        case OPT_FAST_PEDESTRIAN_PROPORTION:
+            sprintf(aux, " --fast-ped-proportion=%s", arg);
             break;
         case OPT_MIN_SIMULATION_VALUE:
             sprintf(aux, " --min=%s", arg);

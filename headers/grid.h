@@ -17,6 +17,7 @@ Function_Status copy_double_grid(Double_Grid destination, Double_Grid source);
 Function_Status copy_non_empty_cells(Int_Grid destination, Int_Grid source);
 Function_Status replace_non_empty_cells(Double_Grid destination, Int_Grid source, double value);
 Function_Status sum_grids(Int_Grid destination, Int_Grid source);
+Function_Status sum_double_grids(Double_Grid destination, Double_Grid source);
 bool is_diagonal_valid(Location origin_cell, Location target_cell, Double_Grid floor_field);
 bool is_within_grid_lines(int line_coordinate);
 bool is_within_grid_columns(int column_coordinate);

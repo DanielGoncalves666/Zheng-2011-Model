@@ -347,6 +347,42 @@ Function_Status sum_grids(Int_Grid destination, Int_Grid source)
 }
 
 /**
+ * Iterates through each cell in the source grid and adds its value to the corresponding
+ * cell in the destination grid. The result is stored in place within the destination grid.
+ * 
+ * @param destination The grid that will be updated with the summed values.
+ * @param second he grid that provides the values to be added to the destination grid.
+ * 
+ * @return Function_Status: FAILURE (0) or SUCCESS (1).
+ * 
+ * @note Both grids must be of global size (lines and columns). Otherwise, undefined behavior will happen.
+ */
+Function_Status sum_double_grids(Double_Grid destination, Double_Grid source)
+{
+    if(destination == NULL || source == NULL)
+    {
+        fprintf(stderr, "The destination or/and source grids received by 'sum_grids' was a null pointer.\n");
+        return FAILURE;
+    }
+
+    for(int i = 0; i < cli_args.global_line_number; i++)
+    {
+        if(destination[i] == NULL || source[i] == NULL)
+        {
+            fprintf(stderr, "The line %d of destination or/and source in 'sum_grids' was a null pointer.\n", i);
+            return FAILURE;
+        }
+
+        for(int j = 0; j < cli_args.global_column_number; j++)
+        {
+            destination[i][j] += source[i][j];
+        }
+    }
+
+    return SUCCESS;
+}
+
+/**
  * Deallocate all memory assigned to a integer grid.
  *
  * @param grid An integer or double grid, casted to (void **).

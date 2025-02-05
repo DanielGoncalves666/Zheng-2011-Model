@@ -22,20 +22,21 @@ typedef struct pedestrian * Pedestrian;
 typedef struct{
     Pedestrian *list;
     int num_pedestrians;
+    int num_fast_pedestrians;
     int num_dead_pedestrians;
 } Pedestrian_Set;
 
 Function_Status insert_pedestrians_at_random(int qtd);
-Function_Status add_new_pedestrian(Location pedestrian_coordinates);
+Function_Status add_new_pedestrian(Location pedestrian_coordinates, bool fast_pedestrian);
 void deallocate_pedestrians();
-void evaluate_pedestrians_movements();
-Function_Status identify_pedestrian_conflicts(Cell_Conflict *pedestrian_conflicts, int *num_conflicts);
+void evaluate_pedestrians_movements(bool only_fast);
+Function_Status identify_pedestrian_conflicts(Cell_Conflict *pedestrian_conflicts, int *num_conflicts, bool only_fast);
 Function_Status solve_pedestrian_conflicts(Cell_Conflict pedestrian_conflicts, int num_conflicts);
 void print_pedestrian_conflict_information(Cell_Conflict pedestrian_conflicts, int num_conflicts);
-void apply_pedestrian_movement();
+void apply_pedestrian_movement(bool only_fast);
 void update_pedestrian_position_grid();
 bool is_environment_empty();
-void reset_pedestrian_state();
+void reset_pedestrian_state(bool only_fast);
 void reset_pedestrians_structures();
 
 extern Int_Grid pedestrian_position_grid;

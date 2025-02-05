@@ -43,6 +43,7 @@ typedef struct{
     double max;
     double step;
     double spread_rate;
+    double fast_ped_proportion;
 } Command_Line_Args;
 
 error_t parser_function(int key, char *arg, struct argp_state *state);

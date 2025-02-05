@@ -76,7 +76,12 @@ void print_complete_environment(FILE *output_stream, int simulation_number, int 
 			for(int j = 0; j < cli_args.global_column_number; j++)
 			{
 				if(pedestrian_position_grid[i][j] != 0)
-					fprintf(output_stream,"👤");
+				{
+					if(pedestrian_set.list[pedestrian_position_grid[i][j] - 1]->fast_pedestrian)
+						fprintf(output_stream,"🏃");
+					else
+						fprintf(output_stream,"👤");
+				}
 				else if(fire_grid[i][j] == FIRE_CELL)
 					fprintf(output_stream, "🔥");
 				else if(exits_only_grid[i][j] == EXIT_CELL)

@@ -421,9 +421,10 @@ static Function_Status symbol_processing(char read_char, Location coordinates)
             break;
         case 'p':
         case 'P':
+            // Incluir F ou f para pedestres rápiddos
             if(origin_uses_static_pedestrians() == true)
             {
-                if( add_new_pedestrian(coordinates) == FAILURE)
+                if( add_new_pedestrian(coordinates, false) == FAILURE)
                     return FAILURE;
 
                 pedestrian_position_grid[coordinates.lin][coordinates.col] = pedestrian_set.list[pedestrian_set.num_pedestrians - 1]->id;

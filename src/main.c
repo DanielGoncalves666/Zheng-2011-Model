@@ -23,7 +23,7 @@
 #include"../headers/fire_dynamics.h"
 
 static Function_Status run_simulations(FILE *output_file);
-static Function_Status conflict_solving();
+static Function_Status conflict_solving(bool only_fast);
 static void static_field_calculation();
 static void deallocate_program_structures(FILE *output_file, FILE *auxiliary_file);
 
@@ -172,6 +172,8 @@ static Function_Status run_simulations(FILE *output_file)
         pedestrian_set.num_dead_pedestrians = 0; // Resets the number of dead pedestrians.
 
         fill_double_grid(exits_set.dynamic_floor_field, cli_args.global_line_number, cli_args.global_column_number, 0); // Restart the dynamic floor field
+        fill_double_grid(exits_set.normalized_dynamic_floor_field, cli_args.global_line_number, cli_args.global_column_number, 0);
+        fill_double_grid(exits_set.fast_pedestrian_trace, cli_args.global_line_number, cli_args.global_column_number, 0); // Fast only
         copy_integer_grid(fire_grid, initial_fire_grid); // Restarts the fire grid.
 
         calculate_fire_floor_field();
@@ -202,20 +204,36 @@ static Function_Status run_simulations(FILE *output_file)
             }
 
             if(cli_args.show_debug_information)
-                print_double_grid(stdout, exits_set.dynamic_floor_field, 3);
+            {
+                fprintf(stdout, "Dynamic floor field * Ks - Timestep %d\n", number_timesteps);
+                multiply_and_print_double_grid(stdout, exits_set.normalized_dynamic_floor_field, 5, cli_args.kd);
+            }
 
-            evaluate_pedestrians_movements();
+            // Fast Pedestrians
+
+            if(pedestrian_set.num_fast_pedestrians > 0)
+            {
+                evaluate_pedestrians_movements(true);
+                if(conflict_solving(true) == FAILURE)
+                    return FAILURE;
+
+                apply_pedestrian_movement(true);
+                update_pedestrian_position_grid();
+                reset_pedestrian_state(true);
+            }
+
+            // All Pedestrians
+
+            evaluate_pedestrians_movements(false);
             
-            if(conflict_solving() == FAILURE)
+            if(conflict_solving(false) == FAILURE)
                 return FAILURE;
 
-            apply_pedestrian_movement();
+            apply_pedestrian_movement(false);
             update_pedestrian_position_grid();
-            reset_pedestrian_state();
+            reset_pedestrian_state(false);
             
             number_timesteps++;
-
-            printf("%d %d\n", pedestrian_set.list[437]->current.lin, pedestrian_set.list[437]->current.col);
 
             if(cli_args.output_format == OUTPUT_VISUALIZATION)
             {
@@ -224,9 +242,10 @@ static Function_Status run_simulations(FILE *output_file)
                     
                 print_complete_environment(output_file, simu_index,number_timesteps);
             }
-
-            apply_decay_and_diffusion();
             
+            //apply_decay_and_diffusion();
+            alternative_apply_decay_and_diffusion();
+
             // The fire doesn't spread in timestep 0, since the timestep variable is incremented before
             if(number_timesteps % fire_spread_interval == 0 && cli_args.fire_is_present) 
             {
@@ -238,6 +257,8 @@ static Function_Status run_simulations(FILE *output_file)
                 static_field_calculation(); // Recalculation of the static field.
             }
         }
+
+        fprintf(stdout, "Non-escaped: %d\n", pedestrian_set.num_dead_pedestrians);
 
         if(origin_uses_static_pedestrians() == true)
             reset_pedestrians_structures();
@@ -255,14 +276,16 @@ static Function_Status run_simulations(FILE *output_file)
 
 /**
  * Calls the necessary functions to identify and solve conflicts between pedestrians.
+ * @param only_fast A boolean, indicating if the operations should be performed only on fast pedestrians.
+ * 
  * @return Function_Status: FAILURE (0) or SUCCESS (1).
 */
-static Function_Status conflict_solving()
+static Function_Status conflict_solving(bool only_fast)
 {
     Cell_Conflict pedestrian_conflicts = NULL;
     int num_conflicts = 0;
 
-    if(identify_pedestrian_conflicts(&pedestrian_conflicts, &num_conflicts) == FAILURE)
+    if(identify_pedestrian_conflicts(&pedestrian_conflicts, &num_conflicts, only_fast) == FAILURE)
         return FAILURE;                
 
     if(solve_pedestrian_conflicts(pedestrian_conflicts, num_conflicts) == FAILURE)

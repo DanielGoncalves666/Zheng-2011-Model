@@ -191,6 +191,7 @@ void calculate_fire_floor_field()
         {
             if(exits_set.fire_floor_field[i][j] != 0)
                 exits_set.fire_floor_field[i][j] /= sum_of_all_distances;
+                //exits_set.fire_floor_field[i][j] /=  45.848087;
         }
     }
 }

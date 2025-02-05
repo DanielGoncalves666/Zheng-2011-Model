@@ -16,12 +16,14 @@ typedef struct exit * Exit;
 typedef struct{
     Double_Grid static_floor_field;
     Double_Grid dynamic_floor_field;
+    Double_Grid normalized_dynamic_floor_field;
     Double_Grid fire_floor_field;
     Exit *list;
     int num_exits;
     Double_Grid distance_to_exits_grid; // Grid storing the distance to the nearest exit for each cell.
     Double_Grid aux_static_grid; // Temporary auxiliary grid for storing an alternative static floor field, used for pedestrians unable to visualize certain exits.
     Double_Grid aux_dynamic_grid; // Grid used to help in the diffusion process.
+    Double_Grid fast_pedestrian_trace; // Auxiliary grid to hold the fast pedestrian trace when they perform their first movement.
     Double_Grid aux_distance_to_exits_grid; // Grid used to store the distance to exits when a pedestrian doesn't see at least one of them.
 } Exits_Set;
 
