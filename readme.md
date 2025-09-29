@@ -147,6 +147,11 @@ Kirchner model constants and options:
   
 Zheng model constants and options:
 
+      --fast-ped-proportion=FAST-PROPORTION
+                             The proportion of the total number of pedestrians
+                             that will be classified as fast pedestrians. Fast
+                             pedestrians update their positions twice per
+                             timestep. The default value is 0.
       --fire-alpha=FIRE-ALPHA   The value of the second parameter to adjust the
                              strength of the fire floor field. If a pedestrian
                              is closer than RISK, then this value is used in
@@ -155,7 +160,7 @@ Zheng model constants and options:
                              pedestrians are more willing to pass closer to a
                              fire if that means they can exit the environment.
                              Defaults to 0.5.
-      --fire-gamma=FIRE_GAMMA   A constant used in the calculation of the fire
+      --fire-gamma=FIRE-GAMMA   A constant used in the calculation of the fire
                              floor field. If the distance from a cell to a cell
                              with fire is greater than FIRE_GAMMA, the fire
                              floor field (FF) value of that cell will be 0.
